@@ -403,6 +403,41 @@ export function modelsToConfig(
   return out
 }
 
+/**
+ * Build the full `provider.clinepass` config block that the `config` hook
+ * injects into opencode's config at startup. Exported for testing.
+ */
+export function buildProviderConfig(
+  env: Record<string, string | undefined> = process.env,
+): {
+  npm: string
+  name: string
+  options: { baseURL: string }
+  models: Record<string, { name: string; limit: { context: number; output: number } }>
+} {
+  return {
+    npm: "@ai-sdk/openai-compatible",
+    name: "ClinePass",
+    options: { baseURL: `${resolveApiBase(env)}/api/v1` },
+    models: modelsToConfig(),
+  }
+}
+
+/**
+ * Inject the clinepass provider config into a config object (in-place), but
+ * only if the user hasn't already declared a `clinepass` provider themselves.
+ * Exported for testing the `config` hook logic without a plugin runtime.
+ */
+export function injectProviderConfig<T extends { provider?: Record<string, unknown> }>(
+  input: T,
+  env: Record<string, string | undefined> = process.env,
+): void {
+  const provider = input.provider ?? {}
+  if (provider.clinepass) return // respect user's manual config
+  provider.clinepass = buildProviderConfig(env)
+  input.provider = provider
+}
+
 // ─── In-memory credential cache ────────────────────────────────────────────
 // Populated by the loader / authorize / auto-import, read by chat.headers.
 
@@ -490,8 +525,9 @@ export async function autoImportCredentials(
  *   - dropping this file in ~/.config/opencode/plugins/clinepass.ts, or
  *   - adding "opencode-clinepass-provider" to the `plugin` array in opencode.json.
  *
- * The provider config (base URL + models) goes in opencode.json under
- * `provider.clinepass` — see opencode.example.json.
+ * The plugin auto-registers the `clinepass` provider (baseURL + 10 models) via
+ * a `config` hook — no manual opencode.json editing required. Just install the
+ * plugin, run /connect → ClinePass, and pick a model.
  */
 export const ClinePassPlugin: Plugin = async (ctx) => {
   const client = ctx.client as unknown as ClientLike
@@ -586,6 +622,14 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
   }
 
   const hooks: Hooks = {
+    // Auto-register the clinepass provider (baseURL + models) so users never
+    // need to manually edit opencode.json. This hook runs BEFORE the provider
+    // database is built, making ClinePass self-registering like built-in
+    // providers (Copilot, OpenCode Go). Respects any user-defined clinepass.
+    config: async (input) => {
+      injectProviderConfig(input)
+    },
+
     auth: authHook,
 
     // Refresh WorkOS tokens lazily, right before each LLM request, and inject

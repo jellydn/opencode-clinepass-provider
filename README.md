@@ -63,33 +63,18 @@ with Bun at startup:
 }
 ```
 
-### Add the provider config
+### That's it — no config editing needed!
 
-Regardless of which install option you chose, add the `clinepass` provider to
-your `opencode.json` (project-level or `~/.config/opencode/opencode.json`):
+The plugin **auto-registers** the `clinepass` provider (base URL + all 10 models)
+via Opencode's `config` hook at startup — just like built-in providers such as
+GitHub Copilot and OpenCode Go. You do **not** need to manually add anything to
+`opencode.json`.
 
-```jsonc
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "clinepass": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "ClinePass",
-      "options": { "baseURL": "https://api.cline.bot/api/v1" },
-      "models": {
-        "cline-pass/glm-5.2":      { "name": "GLM-5.2 (ClinePass)",          "limit": { "context": 200000,  "output": 131072 } },
-        "cline-pass/kimi-k2.7-code":{ "name": "Kimi K2.7 Code (ClinePass)",  "limit": { "context": 262144,  "output": 131072 } },
-        "cline-pass/deepseek-v4-pro":{ "name": "DeepSeek V4 Pro (ClinePass)","limit": { "context": 1000000, "output": 384000 } }
-        // …see opencode.example.json for all 10 models
-      }
-    }
-  }
-}
-```
-
-> No `apiKey` is set here on purpose — the plugin injects it from your stored
-> credential. If you also load the plugin from npm, add `"plugin":
-> ["opencode-clinepass-provider"]`.
+> **Optional:** If you want to customize the provider (e.g. override the base
+> URL, hide certain models, or change display names), you can still declare a
+> `clinepass` block in `opencode.json` — the plugin respects your manual config
+> and won't overwrite it. See [`opencode.example.json`](./opencode.example.json)
+> for the full block.
 
 ## Authentication
 

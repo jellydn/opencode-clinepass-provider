@@ -17,6 +17,8 @@ import {
   classifyClinePassError,
   MODELS,
   modelsToConfig,
+  buildProviderConfig,
+  injectProviderConfig,
   autoImportCredentials,
   type ClientLike,
 } from "../src/clinepass"
@@ -245,6 +247,42 @@ describe("models", () => {
   it("modelsToConfig produces the opencode provider shape", () => {
     const cfg = modelsToConfig()
     expect(cfg["cline-pass/glm-5.2"]).toEqual({ name: "GLM-5.2 (ClinePass)", limit: { context: 200000, output: 131072 } })
+  })
+})
+
+describe("buildProviderConfig", () => {
+  it("produces a complete provider config block", () => {
+    const cfg = buildProviderConfig()
+    expect(cfg.npm).toBe("@ai-sdk/openai-compatible")
+    expect(cfg.name).toBe("ClinePass")
+    expect(cfg.options.baseURL).toBe("https://api.cline.bot/api/v1")
+    expect(Object.keys(cfg.models)).toHaveLength(10)
+  })
+  it("honours CLINE_API_BASE for the baseURL", () => {
+    const cfg = buildProviderConfig({ CLINE_API_BASE: "https://custom.example.com/" })
+    expect(cfg.options.baseURL).toBe("https://custom.example.com/api/v1")
+  })
+})
+
+describe("injectProviderConfig", () => {
+  it("injects clinepass when no provider config exists", () => {
+    const input: { provider?: Record<string, unknown> } = {}
+    injectProviderConfig(input)
+    expect(input.provider?.clinepass).toBeDefined()
+    expect((input.provider?.clinepass as { npm: string }).npm).toBe("@ai-sdk/openai-compatible")
+  })
+  it("injects clinepass when provider exists but clinepass is absent", () => {
+    const input: { provider?: Record<string, unknown> } = { provider: { anthropic: { name: "Anthropic" } } }
+    injectProviderConfig(input)
+    expect(input.provider?.clinepass).toBeDefined()
+    expect(input.provider?.anthropic).toBeDefined() // existing preserved
+  })
+  it("does NOT overwrite an existing clinepass config", () => {
+    const input: { provider?: Record<string, unknown> } = {
+      provider: { clinepass: { npm: "custom-package", name: "My Custom" } },
+    }
+    injectProviderConfig(input)
+    expect((input.provider?.clinepass as { npm: string }).npm).toBe("custom-package")
   })
 })
 
