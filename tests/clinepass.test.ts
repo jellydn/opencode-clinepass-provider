@@ -18,6 +18,7 @@ import {
   MODELS,
   modelsToConfig,
   buildProviderConfig,
+  fetchRemoteModels,
   injectProviderConfig,
   autoImportCredentials,
   type ClientLike,
@@ -283,6 +284,50 @@ describe("injectProviderConfig", () => {
     }
     injectProviderConfig(input)
     expect((input.provider?.clinepass as { npm: string }).npm).toBe("custom-package")
+  })
+})
+
+describe("fetchRemoteModels", () => {
+  it("returns undefined when no apiKey is provided", async () => {
+    expect(await fetchRemoteModels(undefined)).toBeUndefined()
+  })
+  it("fetches and parses the OpenAI-compatible data envelope", async () => {
+    const f = fakeFetch({
+      data: [
+        { id: "cline-pass/glm-5.2", name: "GLM-5.2", context_length: 1_048_576, max_output_tokens: 131_072 },
+        { id: "cline-pass/new-model", name: "New Model", context_length: 500_000, max_output_tokens: 100_000 },
+      ],
+    })
+    const result = await fetchRemoteModels("sk-test", { fetch: f })
+    expect(result).toBeDefined()
+    expect(Object.keys(result!)).toHaveLength(2)
+    expect(result!["cline-pass/glm-5.2"]!.limit.context).toBe(1_048_576)
+    expect(result!["cline-pass/new-model"]!.limit.output).toBe(100_000)
+  })
+  it("filters out non-cline-pass models", async () => {
+    const f = fakeFetch({
+      data: [
+        { id: "cline-pass/glm-5.2", name: "GLM-5.2", context_length: 200_000, max_output_tokens: 131_072 },
+        { id: "anthropic/claude-4", name: "Claude 4", context_length: 200_000, max_output_tokens: 100_000 },
+      ],
+    })
+    const result = await fetchRemoteModels("sk-test", { fetch: f })
+    expect(Object.keys(result!)).toHaveLength(1)
+    expect(result!["anthropic/claude-4"]).toBeUndefined()
+  })
+  it("falls back to static data when API returns incomplete entries", async () => {
+    const f = fakeFetch({ data: [{ id: "cline-pass/glm-5.2", name: "GLM-5.2" }] })
+    const result = await fetchRemoteModels("sk-test", { fetch: f })
+    // context_length and max_output_tokens missing → falls back to static MODELS
+    expect(result!["cline-pass/glm-5.2"]!.limit.context).toBe(1_048_576)
+  })
+  it("returns undefined on non-ok response", async () => {
+    const f = fakeFetch("error", { ok: false, status: 401 })
+    expect(await fetchRemoteModels("sk-test", { fetch: f })).toBeUndefined()
+  })
+  it("returns undefined on network error", async () => {
+    const f = vi.fn(async () => { throw new Error("network") }) as unknown as typeof globalThis.fetch
+    expect(await fetchRemoteModels("sk-test", { fetch: f })).toBeUndefined()
   })
 })
 

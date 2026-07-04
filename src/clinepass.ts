@@ -404,6 +404,73 @@ export function modelsToConfig(
 }
 
 /**
+ * Fetch the model list from the Cline API `/api/v1/models` endpoint (OpenAI-compatible
+ * format: `{ data: [{ id, name, context_length, max_output_tokens, ... }] }`).
+ * Returns a record keyed by model id, or `undefined` on any error (network, auth, parse).
+ *
+ * The returned objects carry enough fields for Opencode to use them as provider models
+ * — name, limit, and api info. The caller should map these into the shape Opencode expects.
+ */
+export async function fetchRemoteModels(
+  apiKey: string | undefined,
+  options: { apiBase?: string; fetch?: typeof globalThis.fetch; timeoutMs?: number } = {},
+): Promise<Record<string, { name: string; limit: { context: number; output: number } }> | undefined> {
+  const fetchFn = options.fetch ?? globalThis.fetch
+  const apiBase = options.apiBase ?? resolveApiBase()
+  const timeoutMs = options.timeoutMs ?? 5_000
+
+  if (!apiKey || !fetchFn) return undefined
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetchFn(`${apiBase}/api/v1/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+    })
+
+    if (!response.ok) return undefined
+
+    const json: unknown = await response.json()
+    const rawList: Array<Record<string, unknown>> = Array.isArray(json)
+      ? json
+      : (json as Record<string, unknown>).data !== undefined && Array.isArray((json as Record<string, unknown>).data)
+        ? ((json as Record<string, unknown>).data as Array<Record<string, unknown>>)
+        : []
+
+    if (rawList.length === 0) return undefined
+
+    // Only include models with the "cline-pass/" prefix
+    const out: Record<string, { name: string; limit: { context: number; output: number } }> = {}
+    for (const raw of rawList) {
+      const id = typeof raw.id === "string" ? raw.id : undefined
+      if (!id || !id.startsWith("cline-pass/")) continue
+
+      const name = typeof raw.name === "string" ? raw.name : id
+      const context = typeof raw.context_length === "number" ? raw.context_length : undefined
+      const output = typeof raw.max_output_tokens === "number" ? raw.max_output_tokens : undefined
+
+      // Fall back to static data if the API doesn't provide these fields
+      const staticFallback = MODELS.find((m) => m.id === id)
+      out[id] = {
+        name,
+        limit: {
+          context: context ?? staticFallback?.context ?? 128_000,
+          output: output ?? staticFallback?.output ?? 8_192,
+        },
+      }
+    }
+
+    return Object.keys(out).length > 0 ? out : undefined
+  } catch {
+    return undefined
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * Build the full `provider.clinepass` config block that the `config` hook
  * injects into opencode's config at startup. Exported for testing.
  */
@@ -628,6 +695,22 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
     // providers (Copilot, OpenCode Go). Respects any user-defined clinepass.
     config: async (input) => {
       injectProviderConfig(input)
+    },
+
+    // Dynamically discover models from the Cline API (`/api/v1/models`) so the
+    // model list stays current with Cline's offerings (new models, updated
+    // context windows, etc.). Falls back to the static MODELS array on any
+    // error (network, auth, parse) — you always have a working set of models.
+    provider: {
+      id: PROVIDER_ID,
+      models: async (_provider, ctx) => {
+        const key = extractKey(ctx.auth)
+        if (key) {
+          const remote = await fetchRemoteModels(key).catch(() => undefined)
+          if (remote) return remote as Record<string, any> as any
+        }
+        return modelsToConfig() as Record<string, any> as any
+      },
     },
 
     auth: authHook,
