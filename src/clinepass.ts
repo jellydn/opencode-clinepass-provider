@@ -681,6 +681,9 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
 }
 
 export default {
+  // Required by Opencode's file-based plugin loader: resolvePluginId() throws
+  // "Path plugin must export id" for file:// plugins without an id field.
+  id: "opencode-clinepass-provider",
   // V1 plugin module format: Opencode's loader reads `mod.default.server`
   // and calls `server(input, options)`. Using this object form (instead of
   // `export default ClinePassPlugin`) ensures the legacy loader path — which
