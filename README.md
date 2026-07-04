@@ -118,7 +118,7 @@ dashboard and prompts you to paste a static API key.
 
 | Model ID | Display name | Context | Max output |
 |---|---|---:|---:|
-| `cline-pass/glm-5.2` | GLM-5.2 | 200,000 | 131,072 |
+| `cline-pass/glm-5.2` | GLM-5.2 | 1,048,576 | 131,072 |
 | `cline-pass/kimi-k2.7-code` | Kimi K2.7 Code | 262,144 | 131,072 |
 | `cline-pass/kimi-k2.6` | Kimi K2.6 | 262,144 | 131,072 |
 | `cline-pass/deepseek-v4-pro` | DeepSeek V4 Pro | 1,000,000 | 384,000 |

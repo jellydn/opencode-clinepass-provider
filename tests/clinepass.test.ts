@@ -246,7 +246,7 @@ describe("models", () => {
   })
   it("modelsToConfig produces the opencode provider shape", () => {
     const cfg = modelsToConfig()
-    expect(cfg["cline-pass/glm-5.2"]).toEqual({ name: "GLM-5.2 (ClinePass)", limit: { context: 200000, output: 131072 } })
+    expect(cfg["cline-pass/glm-5.2"]).toEqual({ name: "GLM-5.2 (ClinePass)", limit: { context: 1048576, output: 131072 } })
   })
 })
 

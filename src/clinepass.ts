@@ -380,7 +380,7 @@ export interface ModelDef {
 
 /** The 10 curated ClinePass models (id, display name, context & output limits). */
 export const MODELS: readonly ModelDef[] = [
-  { id: "cline-pass/glm-5.2", name: "GLM-5.2 (ClinePass)", context: 200_000, output: 131_072 },
+  { id: "cline-pass/glm-5.2", name: "GLM-5.2 (ClinePass)", context: 1_048_576, output: 131_072 },
   { id: "cline-pass/kimi-k2.7-code", name: "Kimi K2.7 Code (ClinePass)", context: 262_144, output: 131_072 },
   { id: "cline-pass/kimi-k2.6", name: "Kimi K2.6 (ClinePass)", context: 262_144, output: 131_072 },
   { id: "cline-pass/deepseek-v4-pro", name: "DeepSeek V4 Pro (ClinePass)", context: 1_000_000, output: 384_000 },
