@@ -58,9 +58,9 @@ export interface ModelConfigEntry {
  *
  * Each model declares a `thinkingLevelMap` mapping all six pi thinking levels
  * (off/minimal/low/medium/high/xhigh) to the provider-specific `reasoning_effort`
- * values that Cline's OpenAI-compatible API expects. Using `@ai-sdk/openai` (not
- * `@ai-sdk/openai-compatible`) gives first-class `reasoningEffort` support so
- * OpenCode can pass the correct effort level mapped from the thinking level.
+ * values that Cline's OpenAI-compatible API expects. `openai-compatible` doesn't
+ * natively support `reasoningEffort`, but this metadata is available for OpenCode
+ * to use in model selection UI, auto-config, and future reasoning integration.
  */
 export const MODELS: readonly ModelDef[] = [
   {
@@ -147,6 +147,14 @@ export const MODELS: readonly ModelDef[] = [
 
 // ─── Config generation ─────────────────────────────────────────────────────
 
+/** Extract the model array from the API response (handles both { data: [...] } and bare [...] formats). */
+function extractModelList(json: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(json)) return json
+  const obj = json as Record<string, unknown> | null | undefined
+  if (obj?.data !== undefined && Array.isArray(obj.data)) return obj.data as Array<Record<string, unknown>>
+  return []
+}
+
 /** Build the opencode.json `provider.clinepass.models` object from MODELS. */
 export function modelsToConfig(
   models: readonly ModelDef[] = MODELS,
@@ -193,13 +201,12 @@ export async function fetchRemoteModels(
     if (!response.ok) return undefined
 
     const json: unknown = await response.json()
-    const rawList: Array<Record<string, unknown>> = Array.isArray(json)
-      ? json
-      : (json as Record<string, unknown>).data !== undefined && Array.isArray((json as Record<string, unknown>).data)
-        ? ((json as Record<string, unknown>).data as Array<Record<string, unknown>>)
-        : []
+    const rawList = extractModelList(json)
 
     if (rawList.length === 0) return undefined
+
+    // Use a Map for O(1) static fallback lookups
+    const staticById = new Map(MODELS.map((m) => [m.id, m]))
 
     // Only include models with the "cline-pass/" prefix
     const out: Record<string, ModelConfigEntry> = {}
@@ -213,7 +220,7 @@ export async function fetchRemoteModels(
       const reasoning = typeof raw.reasoning === "boolean" ? raw.reasoning : undefined
 
       // Fall back to static data if the API doesn't provide these fields
-      const staticFallback = MODELS.find((m) => m.id === id)
+      const staticFallback = staticById.get(id)
       out[id] = {
         name,
         limit: {
@@ -246,7 +253,7 @@ export function buildProviderConfig(
   models: Record<string, ModelConfigEntry>
 } {
   return {
-    npm: "@ai-sdk/openai",
+    npm: "@ai-sdk/openai-compatible",
     name: "ClinePass",
     options: { baseURL: `${resolveApiBase(env)}/api/v1` },
     models: modelsToConfig(),

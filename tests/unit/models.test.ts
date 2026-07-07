@@ -67,7 +67,7 @@ describe("models", () => {
 describe("buildProviderConfig", () => {
   it("produces a complete provider config block with reasoning metadata", () => {
     const cfg = buildProviderConfig()
-    expect(cfg.npm).toBe("@ai-sdk/openai")
+    expect(cfg.npm).toBe("@ai-sdk/openai-compatible")
     expect(cfg.name).toBe("ClinePass")
     expect(cfg.options.baseURL).toBe("https://api.cline.bot/api/v1")
     expect(Object.keys(cfg.models)).toHaveLength(10)
@@ -87,7 +87,7 @@ describe("injectProviderConfig", () => {
     const input: { provider?: Record<string, unknown> } = {}
     injectProviderConfig(input)
     expect(input.provider?.clinepass).toBeDefined()
-    expect((input.provider?.clinepass as { npm: string }).npm).toBe("@ai-sdk/openai")
+    expect((input.provider?.clinepass as { npm: string }).npm).toBe("@ai-sdk/openai-compatible")
   })
 
   it("injects clinepass when provider exists but clinepass is absent", () => {

@@ -135,6 +135,12 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
+/** Shared logger helper — avoids duplicating the log closure in both plugin body and autoImportCredentials. */
+function makeLogger(client: ClientLike) {
+  return (level: "info" | "warn" | "error", message: string, extra?: Record<string, unknown>) =>
+    client.app.log({ body: { service: "clinepass", level, message, extra } }).catch(() => {})
+}
+
 /**
  * Zero-config: if the user hasn't connected ClinePass yet but already has
  * Cline CLI (WorkOS) credentials or CLINE_API_KEY, import them into opencode's
@@ -146,8 +152,7 @@ export async function autoImportCredentials(
   client: ClientLike,
   opts: IoOptions & { fetch?: typeof globalThis.fetch } = {},
 ): Promise<void> {
-  const log = (level: "info" | "warn" | "error", message: string, extra?: Record<string, unknown>) =>
-    client.app.log({ body: { service: "clinepass", level, message, extra } }).catch(() => {})
+  const log = makeLogger(client)
 
   if (readOpencodeAuth(PROVIDER_ID, opts)) return // already configured — don't clobber
 
@@ -208,8 +213,7 @@ export async function autoImportCredentials(
  */
 export const ClinePassPlugin: Plugin = async (ctx) => {
   const client = ctx.client as unknown as ClientLike
-  const log = (level: "info" | "warn" | "error", message: string, extra?: Record<string, unknown>) =>
-    client.app.log({ body: { service: "clinepass", level, message, extra } }).catch(() => {})
+  const log = makeLogger(client)
 
   // Zero-config auto-import of Cline CLI / env credentials (never overwrites /connect).
   await autoImportCredentials(client).catch((e) =>
