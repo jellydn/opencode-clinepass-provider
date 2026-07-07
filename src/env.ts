@@ -6,8 +6,6 @@
 
 import { join } from "node:path"
 
-// ─── Constants ─────────────────────────────────────────────────────────────
-
 /** Provider id used in opencode.json (`provider.clinepass`) and auth.json. */
 export const PROVIDER_ID = "clinepass"
 
@@ -44,12 +42,8 @@ export const WORKOS_REFRESH_MARGIN_MS = 5 * 60 * 1000
 /** Timeout for the refresh HTTP request. */
 export const WORKOS_REFRESH_TIMEOUT_MS = 15_000
 
-// ─── Environment helpers ───────────────────────────────────────────────────
-
 /** Resolve the API base URL, honouring CLINE_API_BASE and normalising slashes. */
-export function resolveApiBase(
-  env: Record<string, string | undefined> = process.env,
-): string {
+export function resolveApiBase(env: Record<string, string | undefined> = process.env): string {
   const base = env[ENV_API_BASE]?.trim()
   if (!base) return DEFAULT_API_BASE
   return base.replace(/\/+$/, "")
@@ -71,8 +65,6 @@ export function sanitizeApiKey(input: string): string {
 export function isWorkosToken(token: string): boolean {
   return token.startsWith(WORKOS_TOKEN_PREFIX)
 }
-
-// ─── Shared I/O options (injectable for testing) ───────────────────────────
 
 export interface IoOptions {
   env?: Record<string, string | undefined>

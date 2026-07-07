@@ -10,15 +10,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { isRecord, stringValue, numberValue } from "./utils.js"
-import {
-  IoOptions,
-  ENV_API_KEY,
-  WORKOS_TOKEN_LIFETIME_MS,
-  CLINE_CLI_AUTH_REL,
-  OPENCODE_AUTH_REL,
-} from "./env.js"
-
-// ─── Shared auth-file walking ──────────────────────────────────────────────
+import { IoOptions, ENV_API_KEY, WORKOS_TOKEN_LIFETIME_MS, CLINE_CLI_AUTH_REL, OPENCODE_AUTH_REL } from "./env.js"
 
 function defaultRead(p: string): string {
   return readFileSync(p, "utf-8")
@@ -43,10 +35,7 @@ function walkClineProviderSettings<T>(
 }
 
 /** Read & parse a JSON file, returning undefined on any error (never throws). */
-function readJsonFile(
-  path: string,
-  opts: IoOptions = {},
-): Record<string, unknown> | undefined {
+function readJsonFile(path: string, opts: IoOptions = {}): Record<string, unknown> | undefined {
   const fileExists = opts.fileExists ?? existsSync
   const readFile = opts.readFile ?? defaultRead
   try {
@@ -61,8 +50,6 @@ function readJsonFile(
     return undefined
   }
 }
-
-// ─── Cline CLI credential extraction ───────────────────────────────────────
 
 /** WorkOS OAuth credentials extracted from the Cline CLI. */
 export interface ClineAuthCredentials {
@@ -82,9 +69,7 @@ export function clineCliAuthPaths(home: string = homedir()): string[] {
  * Looks at providers["cline-pass"].settings.auth then providers["cline"].settings.auth.
  * The accessToken may be expired — refresh via refreshWorkosToken() before use.
  */
-export function resolveClineAuthCredentials(
-  opts: IoOptions = {},
-): ClineAuthCredentials | undefined {
+export function resolveClineAuthCredentials(opts: IoOptions = {}): ClineAuthCredentials | undefined {
   const home = opts.homeDir?.() ?? homedir()
   for (const path of clineCliAuthPaths(home)) {
     const parsed = readJsonFile(path, opts)
@@ -121,14 +106,9 @@ export function resolveClineStaticKey(opts: IoOptions = {}): string | undefined 
   return undefined
 }
 
-// ─── opencode auth store ───────────────────────────────────────────────────
-
 /** Paths searched for opencode's stored credentials. */
 export function opencodeAuthPaths(home: string = homedir()): string[] {
-  return [
-    join(home, OPENCODE_AUTH_REL),
-    join(home, "Library", "Application Support", "opencode", "auth.json"),
-  ]
+  return [join(home, OPENCODE_AUTH_REL), join(home, "Library", "Application Support", "opencode", "auth.json")]
 }
 
 /** Read the stored Auth for a provider id from opencode's auth.json. */
@@ -142,8 +122,6 @@ export function readOpencodeAuth(id: string, opts: IoOptions = {}): Auth | undef
   }
   return undefined
 }
-
-// ─── Auth helpers ──────────────────────────────────────────────────────────
 
 export function oauthAuth(access: string, refresh: string, expires: number, accountId?: string): Auth {
   const a: Auth = { type: "oauth", access, refresh, expires }

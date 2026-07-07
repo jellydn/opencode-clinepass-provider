@@ -10,10 +10,8 @@ export type ClinePassErrorType = "not_subscribed" | "auth_expired" | "rate_limit
 export const CLINEPASS_ERROR_MESSAGES: Record<ClinePassErrorType, string> = {
   not_subscribed:
     "ClinePass subscription required. Visit app.cline.bot to subscribe, or run /connect → ClinePass to re-authenticate.",
-  auth_expired:
-    "ClinePass authentication expired. Run /connect, select ClinePass to refresh your credentials.",
-  rate_limited:
-    "ClinePass rate limit reached. Wait a moment and try again, or check your plan at app.cline.bot.",
+  auth_expired: "ClinePass authentication expired. Run /connect, select ClinePass to refresh your credentials.",
+  rate_limited: "ClinePass rate limit reached. Wait a moment and try again, or check your plan at app.cline.bot.",
   unknown: "ClinePass request failed. Check your subscription at app.cline.bot or run /connect → ClinePass.",
 }
 
