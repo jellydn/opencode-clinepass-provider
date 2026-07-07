@@ -2,8 +2,8 @@
  * Unit tests for error classification (src/errors.ts).
  */
 
-import { describe, it, expect } from "vitest"
-import { classifyClinePassError, CLINEPASS_ERROR_MESSAGES } from "../../src/errors.js"
+import { describe, expect, it } from "vitest"
+import { CLINEPASS_ERROR_MESSAGES, classifyClinePassError } from "../../src/errors.js"
 
 describe("classifyClinePassError", () => {
   it("403 -> not_subscribed", () => {
@@ -32,7 +32,7 @@ describe("classifyClinePassError", () => {
   })
 
   it("all error messages are non-empty strings", () => {
-    for (const [type, msg] of Object.entries(CLINEPASS_ERROR_MESSAGES)) {
+    for (const [, msg] of Object.entries(CLINEPASS_ERROR_MESSAGES)) {
       expect(typeof msg).toBe("string")
       expect(msg.length).toBeGreaterThan(10)
     }

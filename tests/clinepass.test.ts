@@ -21,11 +21,16 @@ describe("autoImportCredentials", () => {
     const c = fakeClient()
     const opts = ioByPath({
       [AUTH_PATH]: "{}",
-      [CLINE_PATH]: clineProvidersJson({ clinePassAuth: { accessToken: "workos:e", refreshToken: "r", expiresAt: Date.now() + 3600_000 } }),
+      [CLINE_PATH]: clineProvidersJson({
+        clinePassAuth: { accessToken: "workos:e", refreshToken: "r", expiresAt: Date.now() + 3600_000 },
+      }),
     })
     await autoImportCredentials(c, opts)
     expect(c.calls.set).toHaveLength(1)
-    expect((c.calls.set[0] as { body: { type: string; access: string } }).body).toMatchObject({ type: "oauth", access: "workos:e" })
+    expect((c.calls.set[0] as { body: { type: string; access: string } }).body).toMatchObject({
+      type: "oauth",
+      access: "workos:e",
+    })
   })
 
   it("refreshes expired WorkOS credentials before importing", async () => {
@@ -34,7 +39,9 @@ describe("autoImportCredentials", () => {
     const opts = {
       ...ioByPath({
         [AUTH_PATH]: "{}",
-        [CLINE_PATH]: clineProvidersJson({ clinePassAuth: { accessToken: "workos:e", refreshToken: "r", expiresAt: 1 } }),
+        [CLINE_PATH]: clineProvidersJson({
+          clinePassAuth: { accessToken: "workos:e", refreshToken: "r", expiresAt: 1 },
+        }),
       }),
       fetch: f,
     }
@@ -45,7 +52,10 @@ describe("autoImportCredentials", () => {
 
   it("imports a static API key from env", async () => {
     const c = fakeClient()
-    const opts = { ...ioByPath({ [AUTH_PATH]: "{}", [CLINE_PATH]: clineProvidersJson({}) }), env: { CLINE_API_KEY: "ck-env" } }
+    const opts = {
+      ...ioByPath({ [AUTH_PATH]: "{}", [CLINE_PATH]: clineProvidersJson({}) }),
+      env: { CLINE_API_KEY: "ck-env" },
+    }
     await autoImportCredentials(c, opts)
     expect(c.calls.set).toHaveLength(1)
     expect((c.calls.set[0] as { body: { type: string; key: string } }).body).toEqual({ type: "api", key: "ck-env" })

@@ -3,13 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest"
-import {
-  DEFAULT_API_BASE,
-  WORKOS_TOKEN_PREFIX,
-  resolveApiBase,
-  sanitizeApiKey,
-  isWorkosToken,
-} from "../../src/env.js"
+import { DEFAULT_API_BASE, WORKOS_TOKEN_PREFIX, resolveApiBase, sanitizeApiKey, isWorkosToken } from "../../src/env.js"
 
 describe("resolveApiBase", () => {
   it("defaults to the Cline API base", () => {

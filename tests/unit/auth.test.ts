@@ -3,12 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest"
-import {
-  resolveClineAuthCredentials,
-  resolveClineStaticKey,
-  readOpencodeAuth,
-  extractKey,
-} from "../../src/auth.js"
+import { resolveClineAuthCredentials, resolveClineStaticKey, readOpencodeAuth, extractKey } from "../../src/auth.js"
 import { clineProvidersJson, ioFor, ioByPath, AUTH_PATH } from "../helpers.js"
 
 describe("resolveClineAuthCredentials", () => {
@@ -17,7 +12,10 @@ describe("resolveClineAuthCredentials", () => {
       clinePassAuth: { accessToken: "workos:eA", refreshToken: "rA", expiresAt: 9000, accountId: "acc" },
     })
     expect(resolveClineAuthCredentials(ioFor(json))).toEqual({
-      accessToken: "workos:eA", refreshToken: "rA", expiresAt: 9000, accountId: "acc",
+      accessToken: "workos:eA",
+      refreshToken: "rA",
+      expiresAt: 9000,
+      accountId: "acc",
     })
   })
 

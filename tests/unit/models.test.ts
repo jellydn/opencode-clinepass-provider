@@ -30,14 +30,14 @@ describe("models", () => {
   })
 
   it("GLM-5.2 supports xhigh reasoning", () => {
-    const glm = MODELS.find(m => m.id === "cline-pass/glm-5.2")!
+    const glm = MODELS.find((m) => m.id === "cline-pass/glm-5.2")!
     expect(glm.thinkingLevelMap.xhigh).toBe("xhigh")
     expect(glm.thinkingLevelMap.off).toBe("none")
   })
 
   it("Kimi models have off as null (no non-reasoning mode)", () => {
     for (const id of ["cline-pass/kimi-k2.7-code", "cline-pass/kimi-k2.6"]) {
-      const m = MODELS.find(x => x.id === id)!
+      const m = MODELS.find((x) => x.id === id)!
       expect(m.thinkingLevelMap.off).toBeNull()
       expect(m.thinkingLevelMap.low).toBe("low")
     }
@@ -45,7 +45,7 @@ describe("models", () => {
 
   it("DeepSeek models have low/medium null, xhigh maps to high", () => {
     for (const id of ["cline-pass/deepseek-v4-pro", "cline-pass/deepseek-v4-flash"]) {
-      const m = MODELS.find(x => x.id === id)!
+      const m = MODELS.find((x) => x.id === id)!
       expect(m.thinkingLevelMap.low).toBeNull()
       expect(m.thinkingLevelMap.medium).toBeNull()
       expect(m.thinkingLevelMap.xhigh).toBe("high")
@@ -114,7 +114,13 @@ describe("fetchRemoteModels", () => {
   it("fetches and parses the OpenAI-compatible data envelope with reasoning", async () => {
     const f = fakeFetch({
       data: [
-        { id: "cline-pass/glm-5.2", name: "GLM-5.2", context_length: 1_048_576, max_output_tokens: 131_072, reasoning: false },
+        {
+          id: "cline-pass/glm-5.2",
+          name: "GLM-5.2",
+          context_length: 1_048_576,
+          max_output_tokens: 131_072,
+          reasoning: false,
+        },
         { id: "cline-pass/new-model", name: "New Model", context_length: 500_000, max_output_tokens: 100_000 },
       ],
     })
@@ -153,7 +159,9 @@ describe("fetchRemoteModels", () => {
   })
 
   it("returns undefined on network error", async () => {
-    const f = vi.fn(async () => { throw new Error("network") }) as unknown as typeof globalThis.fetch
+    const f = vi.fn(async () => {
+      throw new Error("network")
+    }) as unknown as typeof globalThis.fetch
     expect(await fetchRemoteModels("sk-test", { fetch: f })).toBeUndefined()
   })
 })

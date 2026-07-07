@@ -29,10 +29,7 @@ export function ioFor(content: string, exists = true) {
   return { homeDir: () => HOME, fileExists: () => exists, readFile: () => content }
 }
 
-export function fakeFetch(
-  body: unknown,
-  { ok = true, status = 200 }: { ok?: boolean; status?: number } = {},
-) {
+export function fakeFetch(body: unknown, { ok = true, status = 200 }: { ok?: boolean; status?: number } = {}) {
   return vi.fn(async () => ({
     ok,
     status,
@@ -53,7 +50,17 @@ export function fakeClient(): ClientLike & { calls: { set: unknown[]; logs: unkn
   const calls = { set: [] as unknown[], logs: [] as unknown[] }
   return {
     calls,
-    auth: { set: async (o: { path: { id: string }; body: unknown }) => { calls.set.push(o); return true } },
-    app: { log: async (o: { body: unknown }) => { calls.logs.push(o.body); return true } },
+    auth: {
+      set: async (o: { path: { id: string }; body: unknown }) => {
+        calls.set.push(o)
+        return true
+      },
+    },
+    app: {
+      log: async (o: { body: unknown }) => {
+        calls.logs.push(o.body)
+        return true
+      },
+    },
   }
 }
