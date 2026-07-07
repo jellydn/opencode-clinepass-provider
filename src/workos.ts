@@ -4,16 +4,16 @@
  * @module workos
  */
 
-import { stringValue } from "./utils.js"
 import {
-  resolveApiBase,
-  isWorkosToken,
-  WORKOS_TOKEN_PREFIX,
   CLINE_REFRESH_PATH,
+  isWorkosToken,
+  resolveApiBase,
   WORKOS_REFRESH_MARGIN_MS,
   WORKOS_REFRESH_TIMEOUT_MS,
   WORKOS_TOKEN_LIFETIME_MS,
+  WORKOS_TOKEN_PREFIX,
 } from "./env.js"
+import { stringValue } from "./utils.js"
 
 export interface WorkosRefreshOptions {
   fetch?: typeof globalThis.fetch
@@ -24,6 +24,22 @@ export interface RefreshedToken {
   access: string
   refresh: string
   expires: number
+}
+
+/**
+ * Refresh a WorkOS token if it's near expiry, otherwise return it unchanged.
+ * Centralizes the expiry-check-and-refresh pattern used across the plugin.
+ */
+export async function ensureValidWorkosToken(
+  accessToken: string,
+  refreshToken: string,
+  expiresAt: number,
+  options?: { fetch?: typeof globalThis.fetch },
+): Promise<RefreshedToken> {
+  if (expiresAt > Date.now() + WORKOS_REFRESH_MARGIN_MS) {
+    return { access: accessToken, refresh: refreshToken, expires: expiresAt }
+  }
+  return refreshWorkosToken(refreshToken, options)
 }
 
 /**
@@ -51,7 +67,7 @@ export async function refreshWorkosToken(
     })
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("ClinePass token refresh timed out — check your network or use a static API key.")
+      throw new Error("ClinePass token refresh timed out — check your network or use a static API key.", { cause: err })
     }
     throw err
   }
