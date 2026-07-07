@@ -189,6 +189,60 @@ describe("chat.headers hook", () => {
   })
 })
 
+// ─── auth loader hook ───────────────────────────────────────────────────────
+
+describe("auth loader hook", () => {
+  it("returns { apiKey } for oauth auth", async () => {
+    const { hooks } = await getHooks()
+    const result = await hooks.auth!.loader(async () => ({
+      type: "oauth",
+      access: "workos:eyJ",
+      refresh: "r",
+      expires: Date.now() + 3600_000,
+    }))
+    expect(result).toEqual({ apiKey: "workos:eyJ" })
+  })
+
+  it("returns { apiKey } for api auth", async () => {
+    const { hooks } = await getHooks()
+    const result = await hooks.auth!.loader(async () => ({
+      type: "api",
+      key: "ck-test-key",
+    }))
+    expect(result).toEqual({ apiKey: "ck-test-key" })
+  })
+
+  it("returns { apiKey } for wellknown auth", async () => {
+    const { hooks } = await getHooks()
+    const result = await hooks.auth!.loader(async () => ({
+      type: "wellknown",
+      key: "wk-token",
+      token: "t",
+    }))
+    expect(result).toEqual({ apiKey: "wk-token" })
+  })
+
+  it("returns {} when auth is null", async () => {
+    const { hooks } = await getHooks()
+    const result = await hooks.auth!.loader(async () => null as any)
+    expect(result).toEqual({})
+  })
+
+  it("returns {} when auth is undefined", async () => {
+    const { hooks } = await getHooks()
+    const result = await hooks.auth!.loader(async () => undefined)
+    expect(result).toEqual({})
+  })
+
+  it("returns {} when auth() rejects", async () => {
+    const { hooks } = await getHooks()
+    const result = await hooks.auth!.loader(async () => {
+      throw new Error("auth store unavailable")
+    })
+    expect(result).toEqual({})
+  })
+})
+
 // ─── event hook ─────────────────────────────────────────────────────────────
 
 describe("event hook", () => {
