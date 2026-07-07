@@ -19,6 +19,12 @@ adapted from pi's extension API to Opencode's plugin API (`@opencode-ai/plugin`)
   are refreshed lazily before each request via Cline's server-side endpoint
 - 🧠 **10 curated models** — GLM-5.2, Kimi K2.7 Code, Kimi K2.6, DeepSeek V4
   Pro/Flash, MiMo V2.5/Pro, MiniMax M3, Qwen3.7 Max/Plus
+- 🎯 **Per-model thinking level maps** — each model declares support for 6
+  thinking levels (off/minimal/low/medium/high/xhigh) mapped to provider-specific
+  `reasoning_effort` values (GLM-5.2 supports xhigh, Kimi is reasoning-only, etc.)
+- 📦 **Modular architecture** — 7 source files matching
+  [pi-clinepass-provider](https://github.com/jellydn/pi-clinepass-provider)'s
+  structure (utils, env, errors, workos, auth, models, plugin)
 - 🪝 **Friendly, actionable errors** — clear messages for 403 (not subscribed),
   401 (auth expired), and 429 (rate limited) responses
 
@@ -35,14 +41,17 @@ adapted from pi's extension API to Opencode's plugin API (`@opencode-ai/plugin`)
 
 ### Option A — One-line install (recommended)
 
-Download the plugin directly into Opencode's global plugin directory (auto-loaded
-at startup):
+Clone the repo and symlink/copy the plugin into Opencode's plugin directory:
 
 ```bash
+git clone https://github.com/haconglinh1990/opencode-clinepass-provider.git
 mkdir -p ~/.config/opencode/plugins
-curl -fsSL https://raw.githubusercontent.com/haconglinh1990/opencode-clinepass-provider/main/src/clinepass.ts \
-  -o ~/.config/opencode/plugins/clinepass.ts
+cp opencode-clinepass-provider/src/clinepass.ts ~/.config/opencode/plugins/clinepass.ts
 ```
+
+> **Note:** The plugin is modular (7 source files), but only `clinepass.ts`
+> (the entry point) needs to be copied to the plugins directory — OpenCode's
+> Bun runtime resolves the relative imports automatically.
 
 ### Option B — Clone the repo
 
@@ -116,18 +125,18 @@ dashboard and prompts you to paste a static API key.
 
 ## Available models
 
-| Model ID | Display name | Context | Max output |
-|---|---|---:|---:|
-| `cline-pass/glm-5.2` | GLM-5.2 | 1,048,576 | 131,072 |
-| `cline-pass/kimi-k2.7-code` | Kimi K2.7 Code | 262,144 | 131,072 |
-| `cline-pass/kimi-k2.6` | Kimi K2.6 | 262,144 | 131,072 |
-| `cline-pass/deepseek-v4-pro` | DeepSeek V4 Pro | 1,000,000 | 384,000 |
-| `cline-pass/deepseek-v4-flash` | DeepSeek V4 Flash | 1,000,000 | 384,000 |
-| `cline-pass/mimo-v2.5` | MiMo-V2.5 | 262,144 | 131,072 |
-| `cline-pass/mimo-v2.5-pro` | MiMo-V2.5-Pro | 262,144 | 131,072 |
-| `cline-pass/minimax-m3` | MiniMax M3 | 1,048,576 | 131,072 |
-| `cline-pass/qwen3.7-max` | Qwen3.7 Max | 262,144 | 131,072 |
-| `cline-pass/qwen3.7-plus` | Qwen3.7 Plus | 1,048,576 | 131,072 |
+| Model ID | Display name | Context | Max output | Reasoning |
+|---|---|---:|---:|:---:|
+| `cline-pass/glm-5.2` | GLM-5.2 | 1,048,576 | 131,072 | ✅ xhigh |
+| `cline-pass/kimi-k2.7-code` | Kimi K2.7 Code | 262,144 | 131,072 | ✅ (reasoning-only) |
+| `cline-pass/kimi-k2.6` | Kimi K2.6 | 262,144 | 131,072 | ✅ (reasoning-only) |
+| `cline-pass/deepseek-v4-pro` | DeepSeek V4 Pro | 1,000,000 | 384,000 | ✅ (high only) |
+| `cline-pass/deepseek-v4-flash` | DeepSeek V4 Flash | 1,000,000 | 384,000 | ✅ (high only) |
+| `cline-pass/mimo-v2.5` | MiMo-V2.5 | 262,144 | 131,072 | ✅ |
+| `cline-pass/mimo-v2.5-pro` | MiMo-V2.5-Pro | 262,144 | 131,072 | ✅ |
+| `cline-pass/minimax-m3` | MiniMax M3 | 1,048,576 | 131,072 | ✅ |
+| `cline-pass/qwen3.7-max` | Qwen3.7 Max | 262,144 | 131,072 | ✅ |
+| `cline-pass/qwen3.7-plus` | Qwen3.7 Plus | 1,048,576 | 131,072 | ✅ |
 
 Reference a model as `clinepass/<model-id>`, e.g. `clinepass/cline-pass/glm-5.2`.
 
@@ -170,7 +179,35 @@ Opencode's auth store. If the refresh token is revoked (e.g. you re-run
 ```bash
 bun install          # or npm install
 bun run typecheck    # tsc --noEmit
-bun run test         # vitest run
+bun run test         # vitest run (81 tests across 8 files)
+```
+
+### Architecture
+
+The plugin follows a modular structure matching
+[pi-clinepass-provider](https://github.com/jellydn/pi-clinepass-provider):
+
+```
+src/
+├── clinepass.ts       # Plugin entry + barrel re-exports
+├── utils.ts           # Type guards
+├── env.ts             # Constants, env helpers, IoOptions
+├── errors.ts          # Error classification
+├── workos.ts          # WorkOS token refresh
+├── auth.ts            # Credential extraction, auth store
+└── models.ts          # Model definitions, config generation, thinking levels
+
+tests/
+├── helpers.ts              # Shared test fakes and utilities
+├── clinepass.test.ts       # autoImportCredentials tests
+└── unit/
+    ├── utils.test.ts
+    ├── env.test.ts
+    ├── errors.test.ts
+    ├── workos.test.ts
+    ├── auth.test.ts
+    ├── models.test.ts
+    └── clinepass.test.ts   # Plugin hook tests (config, provider, chat, event)
 ```
 
 The pure functions (`resolveClineAuthCredentials`, `refreshWorkosToken`,
