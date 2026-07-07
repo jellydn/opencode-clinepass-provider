@@ -21,7 +21,8 @@ opencode-clinepass-provider/
 │       ├── errors.test.ts    # 7 tests
 │       ├── workos.test.ts    # 5 tests
 │       ├── auth.test.ts      # 14 tests
-│       └── models.test.ts    # 17 tests
+│       ├── models.test.ts    # 17 tests
+│       └── clinepass.test.ts # 23 tests — plugin hooks (config, provider, chat, auth, event)
 ├── opencode.example.json     # Example opencode.json config
 ├── package.json              # Package manifest
 ├── tsconfig.json             # TypeScript config (noEmit)
@@ -41,6 +42,7 @@ opencode-clinepass-provider/
 | Model discovery | `src/models.ts` → `fetchRemoteModels()` |
 | Auth flow | `src/clinepass.ts` → `authHook` inside `ClinePassPlugin` |
 | Error surfacing | `src/errors.ts` → `classifyClinePassError()` + `src/clinepass.ts` → `event` hook |
+| Plugin hook tests | `tests/unit/clinepass.test.ts` (23 tests) |
 | Test helpers | `tests/helpers.ts` → `clineProvidersJson`, `fakeFetch`, `ioByPath`, `fakeClient` |
 | Example config | `opencode.example.json` |
 

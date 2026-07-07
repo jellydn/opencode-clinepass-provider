@@ -6,7 +6,7 @@
 |--------|--------|
 | Framework | Vitest ^2.1.0 |
 | Environment | Node (`vitest.config.ts`: `environment: "node"`) |
-| Test pattern | `tests/**/*.test.ts` (7 files) |
+| Test pattern | `tests/**/*.test.ts` (8 files) |
 | Runner | `bun run test` → `vitest run` |
 
 ## Test Structure
@@ -21,11 +21,13 @@ tests/
     ├── errors.test.ts    # 7 tests  — classifyClinePassError, messages validation
     ├── workos.test.ts    # 5 tests  — refreshWorkosToken (refresh, timeout, errors)
     ├── auth.test.ts      # 14 tests — credential extraction, auth store, extractKey
-    └── models.test.ts    # 17 tests — MODELS, modelsToConfig, buildProviderConfig,
+    ├── models.test.ts    # 17 tests — MODELS, modelsToConfig, buildProviderConfig,
                           #             injectProviderConfig, fetchRemoteModels
+    └── clinepass.test.ts # 23 tests — plugin hook tests (config, provider.models,
+                          #             chat.headers, auth loader, event)
 ```
 
-**Total**: 58 tests across 7 files (up from 55 in 1 monolithic file)
+**Total**: 81 tests across 8 files (up from 55 in 1 monolithic file)
 
 ## Shared Test Helpers (`tests/helpers.ts`)
 
@@ -83,6 +85,13 @@ tests/
 - Refreshes expired WorkOS credentials before importing
 - Imports static API key from env
 - Logs warning when no credentials found
+
+### `unit/clinepass.test.ts` (23 tests)
+- **config hook** (3): injects into empty config, preserves existing, preserves other providers
+- **provider.models hook** (3): falls back to static when no auth, falls back on remote fetch failure (api/oauth)
+- **chat.headers hook** (5): no-op for other providers, no-op for missing info, no-op for api auth, injects Authorization for oauth, handles expired token refresh failure gracefully
+- **auth loader hook** (6): returns apiKey for oauth/api/wellknown, returns {} for null/undefined/rejected auth
+- **event hook** (6): no-op for non-session events, no-op for non-clinepass errors, logs for 403/401/429, no-op for events without error message
 
 ## Mocking Patterns
 
