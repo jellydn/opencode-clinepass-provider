@@ -25,108 +25,87 @@
  * @module opencode-clinepass-provider
  */
 
-import type { Plugin, AuthHook, Hooks } from "@opencode-ai/plugin"
-import type { Auth } from "@opencode-ai/sdk/v2"
-
-// ─── Re-exports (barrel — tests import from "../src/clinepass") ────────────
-
-// utils
-export { isRecord, stringValue, numberValue } from "./utils.js"
-
-// env
-export {
-  PROVIDER_ID,
-  DEFAULT_API_BASE,
-  ENV_API_KEY,
-  ENV_API_BASE,
-  WORKOS_TOKEN_PREFIX,
-  CLINE_REFRESH_PATH,
-  DASHBOARD_URL,
-  CLINE_CLI_AUTH_REL,
-  OPENCODE_AUTH_REL,
-  WORKOS_TOKEN_LIFETIME_MS,
-  WORKOS_REFRESH_MARGIN_MS,
-  WORKOS_REFRESH_TIMEOUT_MS,
-  resolveApiBase,
-  sanitizeApiKey,
-  isWorkosToken,
-  type IoOptions,
-} from "./env.js"
-
-// errors
-export {
-  type ClinePassErrorType,
-  CLINEPASS_ERROR_MESSAGES,
-  classifyClinePassError,
-} from "./errors.js"
-
-// workos
-export {
-  type WorkosRefreshOptions,
-  type RefreshedToken,
-  refreshWorkosToken,
-} from "./workos.js"
+import type { AuthHook, Hooks, Plugin } from "@opencode-ai/plugin"
+import type { Auth, Model as ModelV2 } from "@opencode-ai/sdk/v2"
 
 // auth
 export {
+  apiAuth,
   type ClineAuthCredentials,
   clineCliAuthPaths,
-  resolveClineAuthCredentials,
-  resolveClineStaticKey,
+  extractKey,
+  oauthAuth,
   opencodeAuthPaths,
   readOpencodeAuth,
-  oauthAuth,
-  apiAuth,
-  extractKey,
-} from "./auth.js"
-
-// models
-export {
-  type ThinkingLevel,
-  type ThinkingLevelMap,
-  DEFAULT_THINKING_LEVEL_MAP,
-  type ModelDef,
-  type ModelConfigEntry,
-  MODELS,
-  modelsToConfig,
-  fetchRemoteModels,
-  buildProviderConfig,
-  injectProviderConfig,
-} from "./models.js"
-
-// ─── Plugin imports (not re-exported) ──────────────────────────────────────
-
-import {
-  PROVIDER_ID,
-  DASHBOARD_URL,
-  WORKOS_REFRESH_MARGIN_MS,
-  sanitizeApiKey,
-  type IoOptions,
-} from "./env.js"
-import {
   resolveClineAuthCredentials,
   resolveClineStaticKey,
-  readOpencodeAuth,
-  oauthAuth,
+} from "./auth.js"
+
+// env
+export {
+  CLINE_CLI_AUTH_REL,
+  CLINE_REFRESH_PATH,
+  DASHBOARD_URL,
+  DEFAULT_API_BASE,
+  ENV_API_BASE,
+  ENV_API_KEY,
+  type IoOptions,
+  isWorkosToken,
+  OPENCODE_AUTH_REL,
+  PROVIDER_ID,
+  resolveApiBase,
+  sanitizeApiKey,
+  WORKOS_REFRESH_MARGIN_MS,
+  WORKOS_REFRESH_TIMEOUT_MS,
+  WORKOS_TOKEN_LIFETIME_MS,
+  WORKOS_TOKEN_PREFIX,
+} from "./env.js"
+
+// errors
+export { CLINEPASS_ERROR_MESSAGES, type ClinePassErrorType, classifyClinePassError } from "./errors.js"
+// models
+export {
+  buildProviderConfig,
+  DEFAULT_THINKING_LEVEL_MAP,
+  fetchRemoteModels,
+  injectProviderConfig,
+  MODELS,
+  type ModelConfigEntry,
+  type ModelDef,
+  modelsToConfig,
+  type ThinkingLevel,
+  type ThinkingLevelMap,
+} from "./models.js"
+// utils
+export { isRecord, numberValue, stringValue } from "./utils.js"
+// workos
+export { ensureValidWorkosToken, type RefreshedToken, refreshWorkosToken, type WorkosRefreshOptions } from "./workos.js"
+
+import {
   apiAuth,
   extractKey,
+  oauthAuth,
+  readOpencodeAuth,
+  resolveClineAuthCredentials,
+  resolveClineStaticKey,
 } from "./auth.js"
-import { refreshWorkosToken } from "./workos.js"
+import { DASHBOARD_URL, type IoOptions, PROVIDER_ID, sanitizeApiKey } from "./env.js"
 import { classifyClinePassError } from "./errors.js"
-import { fetchRemoteModels, modelsToConfig, injectProviderConfig } from "./models.js"
-
-// ─── In-memory credential cache ────────────────────────────────────────────
-// Populated by the loader / authorize / auto-import, read by chat.headers.
+import { fetchRemoteModels, injectProviderConfig, modelsToConfig } from "./models.js"
+import { ensureValidWorkosToken } from "./workos.js"
 
 let cachedAuth: Auth | undefined
-
-// ─── Minimal client surface used by the plugin (for testability) ───────────
 
 export interface ClientLike {
   auth: { set(opts: { path: { id: string }; body: Auth }): Promise<unknown> }
   app: {
     log(opts: {
-      body: { service: string; level: string; message: string; extra?: Record<string, unknown> }
+      body: {
+        service: string
+        level: string
+        message: string
+        extra?: Record<string, unknown>
+      }
     }): Promise<unknown>
   }
 }
@@ -158,25 +137,33 @@ export async function autoImportCredentials(
 
   const creds = resolveClineAuthCredentials(opts)
   if (creds) {
-    let { accessToken, refreshToken, expiresAt, accountId } = creds
-    if (expiresAt <= Date.now() + WORKOS_REFRESH_MARGIN_MS) {
-      try {
-        const r = await refreshWorkosToken(refreshToken, { fetch: opts.fetch })
-        accessToken = r.access
-        refreshToken = r.refresh
-        expiresAt = r.expires
-      } catch (e) {
-        await log("warn", "Cline CLI token needs refresh — run /connect, select ClinePass to re-authenticate.", {
-          error: errMsg(e),
-        })
-        return
-      }
+    const { accountId } = creds
+    let accessToken: string
+    let refreshToken: string
+    let expiresAt: number
+    try {
+      const r = await ensureValidWorkosToken(creds.accessToken, creds.refreshToken, creds.expiresAt, {
+        fetch: opts.fetch,
+      })
+      accessToken = r.access
+      refreshToken = r.refresh
+      expiresAt = r.expires
+    } catch (e) {
+      await log("warn", "Cline CLI token needs refresh — run /connect, select ClinePass to re-authenticate.", {
+        error: errMsg(e),
+      })
+      return
     }
     try {
-      await client.auth.set({ path: { id: PROVIDER_ID }, body: oauthAuth(accessToken, refreshToken, expiresAt, accountId) })
+      await client.auth.set({
+        path: { id: PROVIDER_ID },
+        body: oauthAuth(accessToken, refreshToken, expiresAt, accountId),
+      })
       await log("info", "ClinePass: imported your Cline CLI subscription automatically.")
     } catch (e) {
-      await log("error", "ClinePass: failed to import Cline CLI credentials.", { error: errMsg(e) })
+      await log("error", "ClinePass: failed to import Cline CLI credentials.", {
+        error: errMsg(e),
+      })
     }
     return
   }
@@ -187,7 +174,9 @@ export async function autoImportCredentials(
       await client.auth.set({ path: { id: PROVIDER_ID }, body: apiAuth(key) })
       await log("info", "ClinePass: imported your CLINE_API_KEY automatically.")
     } catch (e) {
-      await log("error", "ClinePass: failed to import API key.", { error: errMsg(e) })
+      await log("error", "ClinePass: failed to import API key.", {
+        error: errMsg(e),
+      })
     }
     return
   }
@@ -197,8 +186,6 @@ export async function autoImportCredentials(
     "ClinePass: no credentials found. Run /connect and select ClinePass, or run `cline auth` / set CLINE_API_KEY.",
   )
 }
-
-// ─── Plugin ────────────────────────────────────────────────────────────────
 
 /**
  * Opencode plugin for ClinePass.
@@ -216,9 +203,7 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
   const log = makeLogger(client)
 
   // Zero-config auto-import of Cline CLI / env credentials (never overwrites /connect).
-  await autoImportCredentials(client).catch((e) =>
-    log("error", "ClinePass: auto-import failed.", { error: errMsg(e) }),
-  )
+  await autoImportCredentials(client).catch((e) => log("error", "ClinePass: auto-import failed.", { error: errMsg(e) }))
 
   const authHook: AuthHook = {
     provider: PROVIDER_ID,
@@ -230,7 +215,6 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
       return key ? { apiKey: key } : {}
     },
     methods: [
-      // ── Subscription: reuse Cline CLI WorkOS login ──────────────────────
       {
         type: "oauth",
         label: "Cline CLI / ClinePass subscription (WorkOS)",
@@ -245,21 +229,22 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
               callback: async () => ({ type: "failed" as const }),
             }
           }
-          let { accessToken, refreshToken, expiresAt, accountId } = creds
-          if (expiresAt <= Date.now() + WORKOS_REFRESH_MARGIN_MS) {
-            try {
-              const r = await refreshWorkosToken(refreshToken)
-              accessToken = r.access
-              refreshToken = r.refresh
-              expiresAt = r.expires
-            } catch {
-              return {
-                url: DASHBOARD_URL,
-                instructions:
-                  "Could not refresh your Cline CLI token. Run `cline auth` again, then retry — or use 'Static API key'.",
-                method: "auto",
-                callback: async () => ({ type: "failed" as const }),
-              }
+          const { accountId } = creds
+          let accessToken: string
+          let refreshToken: string
+          let expiresAt: number
+          try {
+            const r = await ensureValidWorkosToken(creds.accessToken, creds.refreshToken, creds.expiresAt)
+            accessToken = r.access
+            refreshToken = r.refresh
+            expiresAt = r.expires
+          } catch {
+            return {
+              url: DASHBOARD_URL,
+              instructions:
+                "Could not refresh your Cline CLI token. Run `cline auth` again, then retry — or use 'Static API key'.",
+              method: "auto",
+              callback: async () => ({ type: "failed" as const }),
             }
           }
           cachedAuth = oauthAuth(accessToken, refreshToken, expiresAt, accountId)
@@ -278,7 +263,6 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
           }
         },
       },
-      // ── Static API key ──────────────────────────────────────────────────
       {
         type: "api",
         label: "Static API key (app.cline.bot → Settings → API Keys)",
@@ -317,13 +301,13 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
     // error (network, auth, parse) — you always have a working set of models.
     provider: {
       id: PROVIDER_ID,
-      models: async (_provider, ctx) => {
-        const key = extractKey(ctx.auth)
+      models: async (_provider, providerCtx) => {
+        const key = extractKey(providerCtx.auth)
         if (key) {
           const remote = await fetchRemoteModels(key).catch(() => undefined)
-          if (remote) return remote as Record<string, any> as any
+          if (remote) return remote as unknown as Record<string, ModelV2>
         }
-        return modelsToConfig() as Record<string, any> as any
+        return modelsToConfig() as unknown as Record<string, ModelV2>
       },
     },
 
@@ -342,23 +326,24 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
       }
       if (!a || a.type !== "oauth") return
       let token = a.access
-      if (Date.now() >= a.expires - WORKOS_REFRESH_MARGIN_MS) {
-        try {
-          const r = await refreshWorkosToken(a.refresh)
-          cachedAuth = oauthAuth(r.access, r.refresh, r.expires, (a as { accountId?: string }).accountId)
+      try {
+        const r = await ensureValidWorkosToken(a.access, a.refresh, a.expires)
+        if (r.access !== a.access) {
           token = r.access
+          cachedAuth = oauthAuth(r.access, r.refresh, r.expires, (a as { accountId?: string }).accountId)
           client.auth.set({ path: { id: PROVIDER_ID }, body: cachedAuth }).catch(() => {})
           await log("info", "ClinePass: refreshed WorkOS access token.")
-        } catch (e) {
-          await log("error", "ClinePass: token refresh failed — requests may fail until you re-authenticate.", {
-            error: errMsg(e),
-          })
         }
+      } catch (e) {
+        await log("error", "ClinePass: token refresh failed — requests may fail until you re-authenticate.", {
+          error: errMsg(e),
+        })
       }
       output.headers["Authorization"] = `Bearer ${token}`
     },
 
     // Surface friendly ClinePass errors (403/401/429) into the opencode log.
+    // Classify all errors, but only log non-unknown ones to avoid noise.
     event: async (input) => {
       const ev = input.event as unknown as {
         type?: string
@@ -367,9 +352,8 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
       if (ev?.type !== "session.next.step.failed") return
       const msg = ev?.properties?.error?.message ?? ""
       if (typeof msg !== "string" || !msg) return
-      const lower = msg.toLowerCase()
-      if (!lower.includes("cline") && !lower.includes("subscription") && !lower.includes("clinepass")) return
-      const { message } = classifyClinePassError(msg)
+      const { type, message } = classifyClinePassError(msg)
+      if (type === "unknown") return
       await log("error", message)
     },
   }

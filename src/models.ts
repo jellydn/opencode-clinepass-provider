@@ -7,8 +7,6 @@
 
 import { resolveApiBase } from "./env.js"
 
-// ─── Thinking level types ──────────────────────────────────────────────────
-
 /** Pi thinking levels that models map to provider-specific reasoning_effort. */
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh"
 
@@ -28,8 +26,6 @@ export const DEFAULT_THINKING_LEVEL_MAP: ThinkingLevelMap = {
   high: "high",
   xhigh: null,
 }
-
-// ─── Model definitions ─────────────────────────────────────────────────────
 
 export interface ModelDef {
   id: string
@@ -145,20 +141,20 @@ export const MODELS: readonly ModelDef[] = [
   },
 ]
 
-// ─── Config generation ─────────────────────────────────────────────────────
+/** Pre-built Map for O(1) static model fallback lookups. */
+const STATIC_MODELS_BY_ID = new Map(MODELS.map((m) => [m.id, m]))
 
 /** Extract the model array from the API response (handles both { data: [...] } and bare [...] formats). */
 function extractModelList(json: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(json)) return json
-  const obj = json as Record<string, unknown> | null | undefined
-  if (obj?.data !== undefined && Array.isArray(obj.data)) return obj.data as Array<Record<string, unknown>>
+  if (typeof json !== "object" || json === null) return []
+  const obj = json as Record<string, unknown>
+  if (obj.data !== undefined && Array.isArray(obj.data)) return obj.data as Array<Record<string, unknown>>
   return []
 }
 
 /** Build the opencode.json `provider.clinepass.models` object from MODELS. */
-export function modelsToConfig(
-  models: readonly ModelDef[] = MODELS,
-): Record<string, ModelConfigEntry> {
+export function modelsToConfig(models: readonly ModelDef[] = MODELS): Record<string, ModelConfigEntry> {
   const out: Record<string, ModelConfigEntry> = {}
   for (const m of models) {
     out[m.id] = {
@@ -205,8 +201,8 @@ export async function fetchRemoteModels(
 
     if (rawList.length === 0) return undefined
 
-    // Use a Map for O(1) static fallback lookups
-    const staticById = new Map(MODELS.map((m) => [m.id, m]))
+    // Use the pre-built module-level Map for O(1) static fallback lookups
+    const staticById = STATIC_MODELS_BY_ID
 
     // Only include models with the "cline-pass/" prefix
     const out: Record<string, ModelConfigEntry> = {}
@@ -244,9 +240,7 @@ export async function fetchRemoteModels(
  * Build the full `provider.clinepass` config block that the `config` hook
  * injects into opencode's config at startup. Exported for testing.
  */
-export function buildProviderConfig(
-  env: Record<string, string | undefined> = process.env,
-): {
+export function buildProviderConfig(env: Record<string, string | undefined> = process.env): {
   npm: string
   name: string
   options: { baseURL: string }
