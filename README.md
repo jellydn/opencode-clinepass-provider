@@ -11,7 +11,7 @@ adapted from pi's extension API to Opencode's plugin API (`@opencode-ai/plugin`)
 
 ## Features
 
-- 🔐 **Two authentication methods** — Cline CLI subscription (WorkOS OAuth) *or*
+- 🔐 **Two authentication methods** — Cline CLI subscription (WorkOS OAuth) _or_
   static API key, both selectable from Opencode's `/connect` command
 - ⚡ **Zero-config auto-import** — reuses your existing `cline auth` login or
   `CLINE_API_KEY` env var on startup (never overwrites manual `/connect` entries)
@@ -68,7 +68,7 @@ with Bun at startup:
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-clinepass-provider"]
+  "plugin": ["opencode-clinepass-provider"],
 }
 ```
 
@@ -125,18 +125,18 @@ dashboard and prompts you to paste a static API key.
 
 ## Available models
 
-| Model ID | Display name | Context | Max output | Reasoning |
-|---|---|---:|---:|:---:|
-| `cline-pass/glm-5.2` | GLM-5.2 | 1,048,576 | 131,072 | ✅ xhigh |
-| `cline-pass/kimi-k2.7-code` | Kimi K2.7 Code | 262,144 | 131,072 | ✅ (reasoning-only) |
-| `cline-pass/kimi-k2.6` | Kimi K2.6 | 262,144 | 131,072 | ✅ (reasoning-only) |
-| `cline-pass/deepseek-v4-pro` | DeepSeek V4 Pro | 1,000,000 | 384,000 | ✅ (high only) |
-| `cline-pass/deepseek-v4-flash` | DeepSeek V4 Flash | 1,000,000 | 384,000 | ✅ (high only) |
-| `cline-pass/mimo-v2.5` | MiMo-V2.5 | 262,144 | 131,072 | ✅ |
-| `cline-pass/mimo-v2.5-pro` | MiMo-V2.5-Pro | 262,144 | 131,072 | ✅ |
-| `cline-pass/minimax-m3` | MiniMax M3 | 1,048,576 | 131,072 | ✅ |
-| `cline-pass/qwen3.7-max` | Qwen3.7 Max | 262,144 | 131,072 | ✅ |
-| `cline-pass/qwen3.7-plus` | Qwen3.7 Plus | 1,048,576 | 131,072 | ✅ |
+| Model ID                       | Display name      |   Context | Max output |      Reasoning      |
+| ------------------------------ | ----------------- | --------: | ---------: | :-----------------: |
+| `cline-pass/glm-5.2`           | GLM-5.2           | 1,048,576 |    131,072 |      ✅ xhigh       |
+| `cline-pass/kimi-k2.7-code`    | Kimi K2.7 Code    |   262,144 |    131,072 | ✅ (reasoning-only) |
+| `cline-pass/kimi-k2.6`         | Kimi K2.6         |   262,144 |    131,072 | ✅ (reasoning-only) |
+| `cline-pass/deepseek-v4-pro`   | DeepSeek V4 Pro   | 1,000,000 |    384,000 |   ✅ (high only)    |
+| `cline-pass/deepseek-v4-flash` | DeepSeek V4 Flash | 1,000,000 |    384,000 |   ✅ (high only)    |
+| `cline-pass/mimo-v2.5`         | MiMo-V2.5         |   262,144 |    131,072 |         ✅          |
+| `cline-pass/mimo-v2.5-pro`     | MiMo-V2.5-Pro     |   262,144 |    131,072 |         ✅          |
+| `cline-pass/minimax-m3`        | MiniMax M3        | 1,048,576 |    131,072 |         ✅          |
+| `cline-pass/qwen3.7-max`       | Qwen3.7 Max       |   262,144 |    131,072 |         ✅          |
+| `cline-pass/qwen3.7-plus`      | Qwen3.7 Plus      | 1,048,576 |    131,072 |         ✅          |
 
 Reference a model as `clinepass/<model-id>`, e.g. `clinepass/cline-pass/glm-5.2`.
 
@@ -169,17 +169,20 @@ Opencode's auth store. If the refresh token is revoked (e.g. you re-run
 
 ## Environment variables
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `CLINE_API_KEY` | — | A static ClinePass API key (auto-imported on startup). |
-| `CLINE_API_BASE` | `https://api.cline.bot` | Override the Cline API base URL. |
+| Variable         | Default                 | Purpose                                                |
+| ---------------- | ----------------------- | ------------------------------------------------------ |
+| `CLINE_API_KEY`  | —                       | A static ClinePass API key (auto-imported on startup). |
+| `CLINE_API_BASE` | `https://api.cline.bot` | Override the Cline API base URL.                       |
 
 ## Development
 
 ```bash
-bun install          # or npm install
-bun run typecheck    # tsc --noEmit
-bun run test         # vitest run (81 tests across 8 files)
+bun install            # or npm install
+bun run lint           # oxlint
+bun run fmt:check      # oxfmt --check (format check)
+bun run typecheck      # tsc --noEmit
+bun run test           # vitest run (81 tests across 8 files)
+bun run konsistent     # structural convention checks
 ```
 
 ### Architecture
@@ -240,4 +243,3 @@ Opencode's plugin API.
 ## Show your support
 
 Give a ⭐️ if this project helped you!
-
