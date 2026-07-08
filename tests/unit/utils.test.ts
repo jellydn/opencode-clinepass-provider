@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest"
-import { isRecord, stringValue, numberValue } from "../../src/utils.js"
+import { isRecord, stringValue, numberValue } from "../../src/lib/utils.js"
 
 describe("type guards", () => {
   it("isRecord", () => {

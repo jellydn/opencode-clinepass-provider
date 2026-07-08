@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest"
-import { refreshWorkosToken } from "../../src/workos.js"
+import { refreshWorkosToken } from "../../src/lib/workos.js"
 import { fakeFetch } from "../helpers.js"
 
 describe("refreshWorkosToken", () => {

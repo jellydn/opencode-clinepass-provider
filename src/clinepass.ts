@@ -14,12 +14,12 @@
  * OpenAI-compatible API (https://api.cline.bot/api/v1).
  *
  * Architecture (modular — mirrors jellydn/pi-clinepass-provider):
- *   src/utils.ts   — type guards (isRecord, stringValue, numberValue)
- *   src/env.ts     — constants, env helpers, IoOptions
- *   src/errors.ts  — error classification
- *   src/workos.ts  — WorkOS token refresh
- *   src/auth.ts    — credential extraction + auth store helpers
- *   src/models.ts  — model definitions + config generation
+ *   src/lib/utils.ts   — type guards (isRecord, stringValue, numberValue)
+ *   src/lib/env.ts     — constants, env helpers, IoOptions
+ *   src/lib/errors.ts  — error classification
+ *   src/lib/workos.ts  — WorkOS token refresh
+ *   src/lib/auth.ts    — credential extraction + auth store helpers
+ *   src/lib/models.ts  — model definitions + config generation
  *   src/clinepass.ts — plugin (this file) + re-exports
  *
  * @module opencode-clinepass-provider
@@ -39,7 +39,7 @@ export {
   readOpencodeAuth,
   resolveClineAuthCredentials,
   resolveClineStaticKey,
-} from "./auth.js"
+} from "./lib/auth.js"
 
 // env
 export {
@@ -59,10 +59,10 @@ export {
   WORKOS_REFRESH_TIMEOUT_MS,
   WORKOS_TOKEN_LIFETIME_MS,
   WORKOS_TOKEN_PREFIX,
-} from "./env.js"
+} from "./lib/env.js"
 
 // errors
-export { CLINEPASS_ERROR_MESSAGES, type ClinePassErrorType, classifyClinePassError } from "./errors.js"
+export { CLINEPASS_ERROR_MESSAGES, type ClinePassErrorType, classifyClinePassError } from "./lib/errors.js"
 // models
 export {
   buildProviderConfig,
@@ -75,11 +75,16 @@ export {
   modelsToConfig,
   type ThinkingLevel,
   type ThinkingLevelMap,
-} from "./models.js"
+} from "./lib/models.js"
 // utils
-export { errMsg, isRecord, numberValue, stringValue } from "./utils.js"
+export { errMsg, isRecord, numberValue, stringValue } from "./lib/utils.js"
 // workos
-export { ensureValidWorkosToken, type RefreshedToken, refreshWorkosToken, type WorkosRefreshOptions } from "./workos.js"
+export {
+  ensureValidWorkosToken,
+  type RefreshedToken,
+  refreshWorkosToken,
+  type WorkosRefreshOptions,
+} from "./lib/workos.js"
 
 import {
   apiAuth,
@@ -88,12 +93,13 @@ import {
   readOpencodeAuth,
   resolveClineAuthCredentials,
   resolveClineStaticKey,
-} from "./auth.js"
-import { DASHBOARD_URL, type IoOptions, PROVIDER_ID, sanitizeApiKey } from "./env.js"
-import { classifyClinePassError } from "./errors.js"
-import { fetchRemoteModels, injectProviderConfig, modelsToConfig } from "./models.js"
-import { errMsg } from "./utils.js"
-import { ensureValidWorkosToken } from "./workos.js"
+  saveOpencodeAuth,
+} from "./lib/auth.js"
+import { DASHBOARD_URL, type IoOptions, PROVIDER_ID, sanitizeApiKey } from "./lib/env.js"
+import { classifyClinePassError } from "./lib/errors.js"
+import { fetchRemoteModels, injectProviderConfig, modelsToConfig } from "./lib/models.js"
+import { errMsg } from "./lib/utils.js"
+import { ensureValidWorkosToken } from "./lib/workos.js"
 
 /** Minimal client surface used by the plugin (for testability). */
 export interface ClientLike {

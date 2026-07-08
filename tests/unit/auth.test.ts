@@ -2,8 +2,16 @@
  * Unit tests for credential extraction and auth store (src/auth.ts).
  */
 
-import { describe, it, expect } from "vitest"
-import { resolveClineAuthCredentials, resolveClineStaticKey, readOpencodeAuth, extractKey } from "../../src/auth.js"
+import { describe, it, expect, vi } from "vitest"
+import {
+  resolveClineAuthCredentials,
+  resolveClineStaticKey,
+  readOpencodeAuth,
+  extractKey,
+  saveOpencodeAuth,
+  oauthAuth,
+  apiAuth,
+} from "../../src/lib/auth.js"
 import { clineProvidersJson, ioFor, ioByPath, AUTH_PATH } from "../helpers.js"
 
 describe("resolveClineAuthCredentials", () => {
@@ -82,5 +90,97 @@ describe("extractKey", () => {
 
   it("undefined -> undefined", () => {
     expect(extractKey(undefined)).toBeUndefined()
+  })
+})
+
+describe("saveOpencodeAuth", () => {
+  it("writes oauth auth to an existing file", () => {
+    const writeFile = vi.fn()
+    const rename = vi.fn()
+    const mkdir = vi.fn()
+    const opts = {
+      ...ioByPath({ [AUTH_PATH]: JSON.stringify({ existing: { type: "api", key: "keep" } }) }),
+      writeFile,
+      rename,
+      mkdir,
+    }
+    const auth = oauthAuth("workos:token", "refresh", Date.now() + 3600000, "acc-1")
+    const result = saveOpencodeAuth("clinepass", auth, opts)
+    expect(result).toBe(true)
+    expect(writeFile).toHaveBeenCalledTimes(1)
+    expect(rename).toHaveBeenCalledTimes(1)
+    expect(mkdir).toHaveBeenCalledTimes(1)
+    const tmpPath = writeFile.mock.calls[0][0]
+    expect(tmpPath).toContain(".tmp-")
+    const written = JSON.parse(writeFile.mock.calls[0][1])
+    expect(written.clinepass).toEqual(auth)
+    expect(written.existing).toEqual({ type: "api", key: "keep" })
+    expect(writeFile.mock.calls[0][1]).toContain("\n")
+  })
+
+  it("writes api auth into an empty file", () => {
+    const writeFile = vi.fn()
+    const rename = vi.fn()
+    const mkdir = vi.fn()
+    const opts = {
+      ...ioByPath({ [AUTH_PATH]: "{}" }),
+      writeFile,
+      rename,
+      mkdir,
+    }
+    const auth = apiAuth("ck-test")
+    const result = saveOpencodeAuth("clinepass", auth, opts)
+    expect(result).toBe(true)
+    const written = JSON.parse(writeFile.mock.calls[0][1])
+    expect(written.clinepass).toEqual(auth)
+    expect(Object.keys(written)).toEqual(["clinepass"])
+  })
+
+  it("updates existing clinepass entry in-place", () => {
+    const writeFile = vi.fn()
+    const rename = vi.fn()
+    const mkdir = vi.fn()
+    const existing = JSON.stringify({ clinepass: { type: "oauth", access: "old", refresh: "old", expires: 1 } })
+    const opts = { ...ioByPath({ [AUTH_PATH]: existing }), writeFile, rename, mkdir }
+    const auth = oauthAuth("new-token", "new-refresh", 9999)
+    saveOpencodeAuth("clinepass", auth, opts)
+    const written = JSON.parse(writeFile.mock.calls[0][1])
+    expect(written.clinepass.access).toBe("new-token")
+    expect(written.clinepass.refresh).toBe("new-refresh")
+  })
+
+  it("returns false when no auth file exists and cannot be written", () => {
+    const writeFile = vi.fn(() => {
+      throw new Error("EACCES: permission denied")
+    })
+    const rename = vi.fn()
+    const mkdir = vi.fn()
+    const opts = {
+      homeDir: () => "/nonexistent",
+      fileExists: () => false,
+      readFile: () => "{}",
+      writeFile,
+      rename,
+      mkdir,
+    }
+    const result = saveOpencodeAuth("clinepass", apiAuth("ck"), opts)
+    expect(result).toBe(false)
+  })
+
+  it("falls through to next path when parsed content is not an object", () => {
+    const writeFile = vi.fn()
+    const rename = vi.fn()
+    const mkdir = vi.fn()
+    const allBad = {
+      homeDir: () => "/",
+      fileExists: () => true,
+      readFile: () => '"string"',
+      writeFile,
+      rename,
+      mkdir,
+    }
+    const result = saveOpencodeAuth("clinepass", apiAuth("ck"), allBad)
+    expect(result).toBe(false)
+    expect(writeFile).not.toHaveBeenCalled()
   })
 })

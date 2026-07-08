@@ -17,8 +17,8 @@ const { mockReadOpencodeAuth } = vi.hoisted(() => ({
   mockReadOpencodeAuth: vi.fn<(...args: unknown[]) => Auth | undefined>(),
 }))
 
-vi.mock("../../src/auth.js", async () => {
-  const actual = await vi.importActual<typeof import("../../src/auth.js")>("../../src/auth.js")
+vi.mock("../../src/lib/auth.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/lib/auth.js")>("../../src/lib/auth.js")
   return { ...actual, readOpencodeAuth: mockReadOpencodeAuth }
 })
 

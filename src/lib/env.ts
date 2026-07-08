@@ -71,4 +71,9 @@ export interface IoOptions {
   homeDir?: () => string
   readFile?: (path: string) => string
   fileExists?: (path: string) => boolean
+  writeFile?: (path: string, data: string) => void
+  /** Atomically replace target file with source path (optional override for testing). */
+  rename?: (from: string, to: string) => void
+  /** Create parent directories (optional override for testing). */
+  mkdir?: (path: string) => void
 }

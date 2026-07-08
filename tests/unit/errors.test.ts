@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { CLINEPASS_ERROR_MESSAGES, classifyClinePassError } from "../../src/errors.js"
+import { CLINEPASS_ERROR_MESSAGES, classifyClinePassError } from "../../src/lib/errors.js"
 
 describe("classifyClinePassError", () => {
   it("403 -> not_subscribed", () => {

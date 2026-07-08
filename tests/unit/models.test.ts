@@ -10,7 +10,7 @@ import {
   fetchRemoteModels,
   injectProviderConfig,
   type ThinkingLevel,
-} from "../../src/models.js"
+} from "../../src/lib/models.js"
 import { fakeFetch } from "../helpers.js"
 
 describe("models", () => {

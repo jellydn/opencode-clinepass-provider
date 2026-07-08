@@ -6,9 +6,9 @@
  */
 
 import type { Auth } from "@opencode-ai/sdk/v2"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs"
 import { homedir } from "node:os"
-import { join } from "node:path"
+import { join, dirname } from "node:path"
 import { errMsg, isRecord, stringValue, numberValue } from "./utils.js"
 import { IoOptions, ENV_API_KEY, WORKOS_TOKEN_LIFETIME_MS, CLINE_CLI_AUTH_REL, OPENCODE_AUTH_REL } from "./env.js"
 
@@ -134,6 +134,40 @@ export function apiAuth(key: string): Auth {
 }
 
 /** Extract a usable bearer token from a stored Auth record. */
+/**
+ * Write the Auth for a provider id directly into opencode's auth.json file.
+ * Used as a belt-and-suspenders persistence alongside `client.auth.set()`.
+ * Creates parent directories if needed and writes atomically via temp file.
+ * Returns true on success, false on any error (never throws).
+ */
+export function saveOpencodeAuth(id: string, auth: Auth, opts: IoOptions = {}): boolean {
+  const home = opts.homeDir?.() ?? homedir()
+  const writeFile = opts.writeFile ?? ((p: string, d: string) => writeFileSync(p, d, "utf-8"))
+  const rename = opts.rename ?? renameSync
+  const mkdir = opts.mkdir ?? ((p: string) => mkdirSync(p, { recursive: true }))
+  const readFile = opts.readFile ?? defaultRead
+  const fileExists = opts.fileExists ?? existsSync
+  for (const path of opencodeAuthPaths(home)) {
+    try {
+      const raw = fileExists(path) ? JSON.parse(readFile(path)) : {}
+      if (typeof raw !== "object" || raw === null) continue
+      raw[id] = auth
+      // Write atomically: temp file → rename to avoid partial writes
+      const tmp = `${path}.tmp-${process.pid}`
+      mkdir(dirname(path))
+      writeFile(tmp, JSON.stringify(raw, null, 2))
+      rename(tmp, path)
+      return true
+    } catch (e) {
+      const msg = errMsg(e)
+      if (!msg.includes("ENOENT") && !msg.includes("not found") && !msg.includes("EACCES")) {
+        console.warn(`[clinepass] Warning: failed to write auth to ${path}: ${msg}`)
+      }
+    }
+  }
+  return false
+}
+
 export function extractKey(auth?: Auth | null): string | undefined {
   if (!auth) return undefined
   if (auth.type === "oauth") return auth.access
