@@ -77,7 +77,7 @@ export {
   type ThinkingLevelMap,
 } from "./models.js"
 // utils
-export { isRecord, numberValue, stringValue } from "./utils.js"
+export { errMsg, isRecord, numberValue, stringValue } from "./utils.js"
 // workos
 export { ensureValidWorkosToken, type RefreshedToken, refreshWorkosToken, type WorkosRefreshOptions } from "./workos.js"
 
@@ -92,8 +92,10 @@ import {
 import { DASHBOARD_URL, type IoOptions, PROVIDER_ID, sanitizeApiKey } from "./env.js"
 import { classifyClinePassError } from "./errors.js"
 import { fetchRemoteModels, injectProviderConfig, modelsToConfig } from "./models.js"
+import { errMsg } from "./utils.js"
 import { ensureValidWorkosToken } from "./workos.js"
 
+/** Minimal client surface used by the plugin (for testability). */
 export interface ClientLike {
   auth: { set(opts: { path: { id: string }; body: Auth }): Promise<unknown> }
   app: {
@@ -106,10 +108,6 @@ export interface ClientLike {
       }
     }): Promise<unknown>
   }
-}
-
-function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
 }
 
 /** Shared logger helper — avoids duplicating the log closure in both plugin body and autoImportCredentials. */
@@ -197,6 +195,8 @@ export async function autoImportCredentials(
  * plugin, run /connect → ClinePass, and pick a model.
  */
 export const ClinePassPlugin: Plugin = async (ctx) => {
+  // SDK client types don't expose the internal shape; ClientLike captures the
+  // minimal surface the plugin actually uses — honest boundary cast.
   const client = ctx.client as unknown as ClientLike
   const log = makeLogger(client)
 
@@ -304,6 +304,7 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
           // does not declare but OpenCode consumes at runtime — honest boundary cast.
           if (remote) return remote as unknown as Record<string, ModelV2>
         }
+        // Same boundary cast for the static fallback path.
         return modelsToConfig() as unknown as Record<string, ModelV2>
       },
     },

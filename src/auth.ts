@@ -9,7 +9,7 @@ import type { Auth } from "@opencode-ai/sdk/v2"
 import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { isRecord, stringValue, numberValue } from "./utils.js"
+import { errMsg, isRecord, stringValue, numberValue } from "./utils.js"
 import { IoOptions, ENV_API_KEY, WORKOS_TOKEN_LIFETIME_MS, CLINE_CLI_AUTH_REL, OPENCODE_AUTH_REL } from "./env.js"
 
 function defaultRead(p: string): string {
@@ -43,7 +43,7 @@ function readJsonFile(path: string, opts: IoOptions = {}): Record<string, unknow
     const parsed: unknown = JSON.parse(readFile(path))
     return isRecord(parsed) ? parsed : undefined
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg = errMsg(e)
     if (!msg.includes("ENOENT") && !msg.includes("not found")) {
       console.warn(`[clinepass] Warning: failed to read ${path}: ${msg}`)
     }
