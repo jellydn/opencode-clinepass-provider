@@ -133,7 +133,6 @@ export function apiAuth(key: string): Auth {
   return { type: "api", key }
 }
 
-/** Extract a usable bearer token from a stored Auth record. */
 /**
  * Write the Auth for a provider id directly into opencode's auth.json file.
  * Used as a belt-and-suspenders persistence alongside `client.auth.set()`.
@@ -168,6 +167,7 @@ export function saveOpencodeAuth(id: string, auth: Auth, opts: IoOptions = {}): 
   return false
 }
 
+/** Extract a usable bearer token from a stored Auth record. */
 export function extractKey(auth?: Auth | null): string | undefined {
   if (!auth) return undefined
   if (auth.type === "oauth") return auth.access
