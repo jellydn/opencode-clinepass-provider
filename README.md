@@ -50,9 +50,10 @@ cp opencode-clinepass-provider/src/clinepass.ts ~/.config/opencode/plugins/
 cp opencode-clinepass-provider/src/{auth,env,errors,models,utils,workos}.ts ~/.config/opencode/plugins/lib/
 ```
 
-> **Note:** OpenCode scans all `.ts` files in `~/.config/opencode/plugins/` and
-> tries to load each as a plugin. Only `clinepass.ts` is a plugin entry point;
-> the other 6 modules live in `lib/` to avoid loading errors.
+> **Note:** Only `clinepass.ts` is a plugin entry point. The other 6 modules
+> live in `lib/` so Opencode's plugin scanner doesn't try to load them as
+> standalone plugins. The imports in `clinepass.ts` use `./lib/` paths to
+> match this layout.
 
 ### Option B — Clone the repo
 
