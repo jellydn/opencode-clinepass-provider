@@ -5,6 +5,9 @@
 import { vi } from "vitest"
 import type { ClientLike } from "../src/clinepass.js"
 
+type SetCall = Parameters<ClientLike["auth"]["set"]>[0]
+type LogBody = Parameters<ClientLike["app"]["log"]>[0]["body"]
+
 export const HOME = "/fake-home"
 export const CLINE_PATH = `${HOME}/.cline/data/settings/providers.json`
 export const AUTH_PATH = `${HOME}/.local/share/opencode/auth.json`
@@ -46,18 +49,18 @@ export function ioByPath(map: Record<string, string>) {
   }
 }
 
-export function fakeClient(): ClientLike & { calls: { set: unknown[]; logs: unknown[] } } {
-  const calls = { set: [] as unknown[], logs: [] as unknown[] }
+export function fakeClient(): ClientLike & { calls: { set: SetCall[]; logs: LogBody[] } } {
+  const calls = { set: [] as SetCall[], logs: [] as LogBody[] }
   return {
     calls,
     auth: {
-      set: async (o: { path: { id: string }; body: unknown }) => {
+      set: async (o: SetCall) => {
         calls.set.push(o)
         return true
       },
     },
     app: {
-      log: async (o: { body: unknown }) => {
+      log: async (o: { body: LogBody }) => {
         calls.logs.push(o.body)
         return true
       },
