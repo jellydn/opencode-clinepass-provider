@@ -47,7 +47,7 @@ Clone the repo and copy the plugin into Opencode's plugin directory:
 git clone https://github.com/haconglinh1990/opencode-clinepass-provider.git
 mkdir -p ~/.config/opencode/plugins/lib
 cp opencode-clinepass-provider/src/clinepass.ts ~/.config/opencode/plugins/
-cp opencode-clinepass-provider/src/{auth,env,errors,models,utils,workos}.ts ~/.config/opencode/plugins/lib/
+cp opencode-clinepass-provider/src/lib/{auth,env,errors,models,utils,workos}.ts ~/.config/opencode/plugins/lib/
 ```
 
 > **Note:** Only `clinepass.ts` is a plugin entry point. The other 6 modules
@@ -61,7 +61,7 @@ cp opencode-clinepass-provider/src/{auth,env,errors,models,utils,workos}.ts ~/.c
 git clone https://github.com/haconglinh1990/opencode-clinepass-provider.git
 mkdir -p ~/.config/opencode/plugins/lib
 cp opencode-clinepass-provider/src/clinepass.ts ~/.config/opencode/plugins/
-cp opencode-clinepass-provider/src/{auth,env,errors,models,utils,workos}.ts ~/.config/opencode/plugins/lib/
+cp opencode-clinepass-provider/src/lib/{auth,env,errors,models,utils,workos}.ts ~/.config/opencode/plugins/lib/
 ```
 
 ### Option C — npm package (when published)
@@ -197,12 +197,13 @@ The plugin follows a modular structure matching
 ```
 src/
 ├── clinepass.ts       # Plugin entry + barrel re-exports
-├── utils.ts           # Type guards
-├── env.ts             # Constants, env helpers, IoOptions
-├── errors.ts          # Error classification
-├── workos.ts          # WorkOS token refresh
-├── auth.ts            # Credential extraction, auth store
-└── models.ts          # Model definitions, config generation, thinking levels
+└── lib/
+    ├── utils.ts           # Type guards
+    ├── env.ts             # Constants, env helpers, IoOptions
+    ├── errors.ts          # Error classification
+    ├── workos.ts          # WorkOS token refresh
+    ├── auth.ts            # Credential extraction, auth store
+    └── models.ts          # Model definitions, config generation, thinking levels
 
 tests/
 ├── helpers.ts              # Shared test fakes and utilities
