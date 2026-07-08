@@ -101,6 +101,13 @@ import { fetchRemoteModels, injectProviderConfig, modelsToConfig } from "./lib/m
 import { errMsg } from "./lib/utils.js"
 import { ensureValidWorkosToken } from "./lib/workos.js"
 
+/**
+ * In-memory cache for the resolved Auth object, set by the auth.loader hook
+ * and read by chat.headers to avoid per-request file IO reading opencode's
+ * auth.json on every LLM call. Also updated on token refresh.
+ */
+let latestAuth: Auth | undefined
+
 /** Minimal client surface used by the plugin (for testability). */
 export interface ClientLike {
   auth: { set(opts: { path: { id: string }; body: Auth }): Promise<unknown> }
@@ -222,7 +229,8 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
     // store doesn't have the entry (e.g. v1/v2 store mismatch, startup timing).
     loader: async (auth) => {
       const a = (await auth().catch(() => undefined)) as Auth | undefined
-      const key = extractKey(a) ?? extractKey(readOpencodeAuth(PROVIDER_ID))
+      latestAuth = a ?? readOpencodeAuth(PROVIDER_ID)
+      const key = extractKey(latestAuth)
       return key ? { apiKey: key } : {}
     },
     methods: [
@@ -331,7 +339,7 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
     "chat.headers": async (input, output) => {
       const providerInfo = input.provider?.info
       if (providerInfo?.id !== PROVIDER_ID) return
-      const a = readOpencodeAuth(PROVIDER_ID)
+      const a = latestAuth ?? readOpencodeAuth(PROVIDER_ID)
       if (!a || a.type !== "oauth") return
       let token = a.access
       try {
@@ -339,6 +347,7 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
         if (r.access !== a.access) {
           token = r.access
           const updated = oauthAuth(r.access, r.refresh, r.expires, (a as { accountId?: string }).accountId)
+          latestAuth = updated
           // Save via SDK API for the runtime credential store
           client.auth.set({ path: { id: PROVIDER_ID }, body: updated }).catch(() => {})
           // Also persist directly to auth.json so readOpencodeAuth always sees
