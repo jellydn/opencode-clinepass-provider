@@ -138,6 +138,10 @@ export function apiAuth(key: string): Auth {
  * Used as a belt-and-suspenders persistence alongside `client.auth.set()`.
  * Creates parent directories if needed and writes atomically via temp file.
  * Returns true on success, false on any error (never throws).
+ *
+ * When no existing file is found at any path, creates the platform-appropriate
+ * default (~/.local/share/opencode/auth.json on Linux, ~/Library/Application
+ * Support/opencode/auth.json on macOS).
  */
 export function saveOpencodeAuth(id: string, auth: Auth, opts: IoOptions = {}): boolean {
   const home = opts.homeDir?.() ?? homedir()
@@ -146,9 +150,13 @@ export function saveOpencodeAuth(id: string, auth: Auth, opts: IoOptions = {}): 
   const mkdir = opts.mkdir ?? ((p: string) => mkdirSync(p, { recursive: true }))
   const readFile = opts.readFile ?? defaultRead
   const fileExists = opts.fileExists ?? existsSync
-  for (const path of opencodeAuthPaths(home)) {
+  const paths = opencodeAuthPaths(home)
+  const defaultPath = defaultOpencodeAuthPath(home)
+  for (const path of paths) {
     try {
-      const raw = fileExists(path) ? JSON.parse(readFile(path)) : {}
+      const exists = fileExists(path)
+      if (!exists && path !== defaultPath) continue
+      const raw = exists ? JSON.parse(readFile(path)) : {}
       if (typeof raw !== "object" || raw === null) continue
       raw[id] = auth
       // Write atomically: temp file → rename to avoid partial writes
@@ -165,6 +173,16 @@ export function saveOpencodeAuth(id: string, auth: Auth, opts: IoOptions = {}): 
     }
   }
   return false
+}
+
+/**
+ * Return the platform-appropriate default path for opencode's auth.json.
+ * On macOS: ~/Library/Application Support/opencode/auth.json
+ * On Linux and other platforms: ~/.local/share/opencode/auth.json
+ */
+export function defaultOpencodeAuthPath(home: string): string {
+  const paths = opencodeAuthPaths(home)
+  return process.platform === "darwin" ? paths[1] : paths[0]
 }
 
 /** Extract a usable bearer token from a stored Auth record. */
