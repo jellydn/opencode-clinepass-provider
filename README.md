@@ -30,7 +30,7 @@ adapted from pi's extension API to Opencode's plugin API (`@opencode-ai/plugin`)
 
 ## Prerequisites
 
-- [Opencode](https://opencode.ai) v1.17+ (the plugin API ships from there)
+- [Opencode](https://opencode.ai) v1.17+ **or** [Kilo Code](https://kilo.ai) CLI 1.0+ (Kilo is a compatible fork of OpenCode)
 - One of:
   - The **Cline CLI** installed and signed in (`npm i -g cline` then `cline auth`)
     with an active ClinePass subscription, **or**
@@ -76,17 +76,47 @@ with Bun at startup:
 }
 ```
 
+### Option D — Kilo Code (compatible fork)
+
+This plugin also works with the [Kilo Code CLI](https://kilo.ai) (v1.0+), which
+is a compatible fork of OpenCode. The plugin export shape and hook API are
+already compatible — just copy the files into Kilo's plugin directory:
+
+```bash
+git clone https://github.com/haconglinh1990/opencode-clinepass-provider.git
+mkdir -p ~/.config/kilo/plugin/lib
+cp opencode-clinepass-provider/src/clinepass.ts ~/.config/kilo/plugin/
+cp opencode-clinepass-provider/src/lib/{auth,env,errors,models,utils,workos}.ts ~/.config/kilo/plugin/lib/
+```
+
+> **Note:** If you don't already have a `package.json` in `~/.config/kilo/`,
+> Kilo creates one automatically when it detects a `plugin/` directory. The
+> plugin imports from `@opencode-ai/plugin` and `@opencode-ai/sdk/v2` — add
+> both to ensure your imports resolve:
+>
+> ```jsonc
+> // ~/.config/kilo/package.json
+> {
+>   "dependencies": {
+>     "@opencode-ai/plugin": "^1.0.0",
+>     "@opencode-ai/sdk": "^1.0.0"
+>   }
+> }
+> ```
+>
+> Restart Kilo after adding the dependencies — it runs `bun install` at startup.
+
 ### That's it — no config editing needed!
 
 The plugin **auto-registers** the `clinepass` provider (base URL + all 10 models)
-via Opencode's `config` hook at startup — just like built-in providers such as
-GitHub Copilot and OpenCode Go. You do **not** need to manually add anything to
-`opencode.json`.
+via its `config` hook at startup — just like built-in providers such as GitHub
+Copilot and OpenCode Go. You do **not** need to manually add anything to your
+config file (whether `opencode.json`, `kilo.json`, or `kilo.jsonc`).
 
 > **Optional:** If you want to customize the provider (e.g. override the base
 > URL, hide certain models, or change display names), you can still declare a
-> `clinepass` block in `opencode.json` — the plugin respects your manual config
-> and won't overwrite it. See [`opencode.example.json`](./opencode.example.json)
+> `clinepass` block in your config — the plugin respects manual config and
+> won't overwrite it. See [`opencode.example.json`](./opencode.example.json)
 > for the full block.
 
 ## Authentication
