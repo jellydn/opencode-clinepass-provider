@@ -144,6 +144,10 @@ export const MODELS: readonly ModelDef[] = [
 /** Pre-built Map for O(1) static model fallback lookups. */
 const STATIC_MODELS_BY_ID = new Map(MODELS.map((m) => [m.id, m]))
 
+/** Default limits used when neither API nor static data provides them. */
+const FALLBACK_CONTEXT = 128_000
+const FALLBACK_OUTPUT = 8_192
+
 /** Extract the model array from the API response (handles both { data: [...] } and bare [...] formats). */
 function extractModelList(json: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(json)) return json
@@ -220,8 +224,8 @@ export async function fetchRemoteModels(
       out[id] = {
         name,
         limit: {
-          context: context ?? staticFallback?.context ?? 128_000,
-          output: output ?? staticFallback?.output ?? 8_192,
+          context: context ?? staticFallback?.context ?? FALLBACK_CONTEXT,
+          output: output ?? staticFallback?.output ?? FALLBACK_OUTPUT,
         },
         reasoning: reasoning ?? staticFallback?.reasoning ?? true,
         thinkingLevelMap: staticFallback?.thinkingLevelMap ?? DEFAULT_THINKING_LEVEL_MAP,

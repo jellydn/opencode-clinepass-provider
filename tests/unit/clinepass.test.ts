@@ -5,11 +5,22 @@
  * verifying that each hook behaves correctly with controlled inputs.
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest"
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest"
 import type { Auth } from "@opencode-ai/sdk/v2"
 import type { Config } from "@opencode-ai/plugin"
 import { ClinePassPlugin, PROVIDER_ID } from "../../src/clinepass.js"
 import { fakeClient } from "../helpers.js"
+
+// Mock readOpencodeAuth so chat.headers tests don't read the real filesystem.
+// vi.mock is hoisted above top-level code, so the mock fn must be defined in vi.hoisted().
+const { mockReadOpencodeAuth } = vi.hoisted(() => ({
+  mockReadOpencodeAuth: vi.fn<(...args: unknown[]) => Auth | undefined>(),
+}))
+
+vi.mock("../../src/auth.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/auth.js")>("../../src/auth.js")
+  return { ...actual, readOpencodeAuth: mockReadOpencodeAuth }
+})
 
 /** Mock fetch so refreshWorkosToken fails fast in tests (avoids real network). */
 function mockFetchToFail() {
@@ -115,6 +126,9 @@ describe("provider.models hook", () => {
 })
 
 describe("chat.headers hook", () => {
+  beforeEach(() => {
+    mockReadOpencodeAuth.mockReset()
+  })
   afterEach(restoreFetch)
 
   it("is a no-op for non-clinepass providers", async () => {
@@ -133,13 +147,8 @@ describe("chat.headers hook", () => {
   })
 
   it("is a no-op for api-type auth (loader handles apiKey)", async () => {
+    mockReadOpencodeAuth.mockReturnValue({ type: "api", key: "ck-test" })
     const { hooks } = await getHooks()
-    const authHook = hooks.auth!
-    await authHook.loader!(
-      async () => ({ type: "api" as const, key: "ck-test" }),
-      {} as Parameters<NonNullable<typeof authHook.loader>>[1],
-    )
-
     const input = chatInput()
     const output = chatOutput()
     await hooks["chat.headers"]!(input as Parameters<NonNullable<(typeof hooks)["chat.headers"]>>[0], output)
@@ -147,19 +156,14 @@ describe("chat.headers hook", () => {
   })
 
   it("injects Authorization header for oauth auth", async () => {
-    const { hooks } = await getHooks()
-    const authHook = hooks.auth!
     const expires = Date.now() + 3600_000
-    await authHook.loader!(
-      async () => ({
-        type: "oauth" as const,
-        access: "workos:test-token",
-        refresh: "r-test",
-        expires,
-      }),
-      {} as Parameters<NonNullable<typeof authHook.loader>>[1],
-    )
-
+    mockReadOpencodeAuth.mockReturnValue({
+      type: "oauth",
+      access: "workos:test-token",
+      refresh: "r-test",
+      expires,
+    })
+    const { hooks } = await getHooks()
     const input = chatInput()
     const output = chatOutput()
     await hooks["chat.headers"]!(input as Parameters<NonNullable<(typeof hooks)["chat.headers"]>>[0], output)
@@ -168,18 +172,13 @@ describe("chat.headers hook", () => {
 
   it("handles expired oauth token refresh failure gracefully", async () => {
     mockFetchToFail()
+    mockReadOpencodeAuth.mockReturnValue({
+      type: "oauth",
+      access: "workos:old-token",
+      refresh: "r-old",
+      expires: 1,
+    })
     const { hooks, client } = await getHooks()
-    const authHook = hooks.auth!
-    await authHook.loader!(
-      async () => ({
-        type: "oauth" as const,
-        access: "workos:old-token",
-        refresh: "r-old",
-        expires: 1,
-      }),
-      {} as Parameters<NonNullable<typeof authHook.loader>>[1],
-    )
-
     const input = chatInput()
     const output = chatOutput()
     await hooks["chat.headers"]!(input as Parameters<NonNullable<(typeof hooks)["chat.headers"]>>[0], output)

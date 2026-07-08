@@ -94,8 +94,6 @@ import { classifyClinePassError } from "./errors.js"
 import { fetchRemoteModels, injectProviderConfig, modelsToConfig } from "./models.js"
 import { ensureValidWorkosToken } from "./workos.js"
 
-let cachedAuth: Auth | undefined
-
 export interface ClientLike {
   auth: { set(opts: { path: { id: string }; body: Auth }): Promise<unknown> }
   app: {
@@ -210,7 +208,6 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
     // Feed the stored credential into the provider as `apiKey`.
     loader: async (auth) => {
       const a = (await auth().catch(() => undefined)) as Auth | undefined
-      cachedAuth = a ?? undefined
       const key = extractKey(a)
       return key ? { apiKey: key } : {}
     },
@@ -247,7 +244,6 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
               callback: async () => ({ type: "failed" as const }),
             }
           }
-          cachedAuth = oauthAuth(accessToken, refreshToken, expiresAt, accountId)
           return {
             url: "https://app.cline.bot",
             instructions:
@@ -279,7 +275,6 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
         authorize: async (inputs) => {
           const key = sanitizeApiKey(inputs?.apiKey ?? "")
           if (!key) return { type: "failed" as const }
-          cachedAuth = apiAuth(key)
           return { type: "success" as const, key, provider: PROVIDER_ID }
         },
       },
@@ -305,6 +300,8 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
         const key = extractKey(providerCtx.auth)
         if (key) {
           const remote = await fetchRemoteModels(key).catch(() => undefined)
+          // ModelConfigEntry carries fields (limit, thinkingLevelMap) that ModelV2
+          // does not declare but OpenCode consumes at runtime — honest boundary cast.
           if (remote) return remote as unknown as Record<string, ModelV2>
         }
         return modelsToConfig() as unknown as Record<string, ModelV2>
@@ -319,19 +316,15 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
     "chat.headers": async (input, output) => {
       const providerInfo = input.provider?.info
       if (providerInfo?.id !== PROVIDER_ID) return
-      let a = cachedAuth
-      if (!a) {
-        a = readOpencodeAuth(PROVIDER_ID) ?? undefined
-        if (a) cachedAuth = a
-      }
+      const a = readOpencodeAuth(PROVIDER_ID)
       if (!a || a.type !== "oauth") return
       let token = a.access
       try {
         const r = await ensureValidWorkosToken(a.access, a.refresh, a.expires)
         if (r.access !== a.access) {
           token = r.access
-          cachedAuth = oauthAuth(r.access, r.refresh, r.expires, (a as { accountId?: string }).accountId)
-          client.auth.set({ path: { id: PROVIDER_ID }, body: cachedAuth }).catch(() => {})
+          const updated = oauthAuth(r.access, r.refresh, r.expires, (a as { accountId?: string }).accountId)
+          client.auth.set({ path: { id: PROVIDER_ID }, body: updated }).catch(() => {})
           await log("info", "ClinePass: refreshed WorkOS access token.")
         }
       } catch (e) {
