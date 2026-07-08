@@ -46,6 +46,9 @@ export function ioByPath(map: Record<string, string>) {
     homeDir: () => HOME,
     fileExists: (p: string) => p in map,
     readFile: (p: string) => map[p] ?? "{}",
+    writeFile: () => {},
+    rename: () => {},
+    mkdir: () => {},
   }
 }
 

@@ -170,7 +170,7 @@ export async function autoImportCredentials(
     }
     // Belt-and-suspenders: also persist directly to auth.json in case the
     // SDK's server API doesn't flush to the file (e.g. early-init timing).
-    saveOpencodeAuth(PROVIDER_ID, authBody)
+    saveOpencodeAuth(PROVIDER_ID, authBody, opts)
     return
   }
 
@@ -185,7 +185,7 @@ export async function autoImportCredentials(
         error: errMsg(e),
       })
     }
-    saveOpencodeAuth(PROVIDER_ID, apiBody)
+    saveOpencodeAuth(PROVIDER_ID, apiBody, opts)
     return
   }
 
