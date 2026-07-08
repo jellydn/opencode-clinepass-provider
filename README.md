@@ -41,23 +41,26 @@ adapted from pi's extension API to Opencode's plugin API (`@opencode-ai/plugin`)
 
 ### Option A — One-line install (recommended)
 
-Clone the repo and symlink/copy the plugin into Opencode's plugin directory:
+Clone the repo and copy the plugin into Opencode's plugin directory:
 
 ```bash
 git clone https://github.com/haconglinh1990/opencode-clinepass-provider.git
-mkdir -p ~/.config/opencode/plugins
-cp opencode-clinepass-provider/src/clinepass.ts ~/.config/opencode/plugins/clinepass.ts
+mkdir -p ~/.config/opencode/plugins/lib
+cp opencode-clinepass-provider/src/clinepass.ts ~/.config/opencode/plugins/
+cp opencode-clinepass-provider/src/{auth,env,errors,models,utils,workos}.ts ~/.config/opencode/plugins/lib/
 ```
 
-> **Note:** The plugin is modular (7 source files), but only `clinepass.ts`
-> (the entry point) needs to be copied to the plugins directory — OpenCode's
-> Bun runtime resolves the relative imports automatically.
+> **Note:** OpenCode scans all `.ts` files in `~/.config/opencode/plugins/` and
+> tries to load each as a plugin. Only `clinepass.ts` is a plugin entry point;
+> the other 6 modules live in `lib/` to avoid loading errors.
 
 ### Option B — Clone the repo
 
 ```bash
 git clone https://github.com/haconglinh1990/opencode-clinepass-provider.git
-cp opencode-clinepass-provider/src/clinepass.ts ~/.config/opencode/plugins/clinepass.ts
+mkdir -p ~/.config/opencode/plugins/lib
+cp opencode-clinepass-provider/src/clinepass.ts ~/.config/opencode/plugins/
+cp opencode-clinepass-provider/src/{auth,env,errors,models,utils,workos}.ts ~/.config/opencode/plugins/lib/
 ```
 
 ### Option C — npm package (when published)
