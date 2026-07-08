@@ -156,30 +156,36 @@ export async function autoImportCredentials(
       })
       return
     }
+    const authBody = oauthAuth(accessToken, refreshToken, expiresAt, accountId)
     try {
       await client.auth.set({
         path: { id: PROVIDER_ID },
-        body: oauthAuth(accessToken, refreshToken, expiresAt, accountId),
+        body: authBody,
       })
       await log("info", "ClinePass: imported your Cline CLI subscription automatically.")
     } catch (e) {
-      await log("error", "ClinePass: failed to import Cline CLI credentials.", {
+      await log("error", "ClinePass: failed to import Cline CLI credentials via SDK.", {
         error: errMsg(e),
       })
     }
+    // Belt-and-suspenders: also persist directly to auth.json in case the
+    // SDK's server API doesn't flush to the file (e.g. early-init timing).
+    saveOpencodeAuth(PROVIDER_ID, authBody)
     return
   }
 
   const key = resolveClineStaticKey(opts)
   if (key) {
+    const apiBody = apiAuth(key)
     try {
-      await client.auth.set({ path: { id: PROVIDER_ID }, body: apiAuth(key) })
+      await client.auth.set({ path: { id: PROVIDER_ID }, body: apiBody })
       await log("info", "ClinePass: imported your CLINE_API_KEY automatically.")
     } catch (e) {
-      await log("error", "ClinePass: failed to import API key.", {
+      await log("error", "ClinePass: failed to import API key via SDK.", {
         error: errMsg(e),
       })
     }
+    saveOpencodeAuth(PROVIDER_ID, apiBody)
     return
   }
 
@@ -212,9 +218,11 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
   const authHook: AuthHook = {
     provider: PROVIDER_ID,
     // Feed the stored credential into the provider as `apiKey`.
+    // Falls back to reading the auth.json file directly if the SDK's auth()
+    // store doesn't have the entry (e.g. v1/v2 store mismatch, startup timing).
     loader: async (auth) => {
       const a = (await auth().catch(() => undefined)) as Auth | undefined
-      const key = extractKey(a)
+      const key = extractKey(a) ?? extractKey(readOpencodeAuth(PROVIDER_ID))
       return key ? { apiKey: key } : {}
     },
     methods: [
@@ -331,7 +339,11 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
         if (r.access !== a.access) {
           token = r.access
           const updated = oauthAuth(r.access, r.refresh, r.expires, (a as { accountId?: string }).accountId)
+          // Save via SDK API for the runtime credential store
           client.auth.set({ path: { id: PROVIDER_ID }, body: updated }).catch(() => {})
+          // Also persist directly to auth.json so readOpencodeAuth always sees
+          // fresh tokens on subsequent requests and across restarts.
+          saveOpencodeAuth(PROVIDER_ID, updated)
           await log("info", "ClinePass: refreshed WorkOS access token.")
         }
       } catch (e) {

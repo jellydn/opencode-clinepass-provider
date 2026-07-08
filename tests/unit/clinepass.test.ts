@@ -13,13 +13,14 @@ import { fakeClient } from "../helpers.js"
 
 // Mock readOpencodeAuth so chat.headers tests don't read the real filesystem.
 // vi.mock is hoisted above top-level code, so the mock fn must be defined in vi.hoisted().
-const { mockReadOpencodeAuth } = vi.hoisted(() => ({
+const { mockReadOpencodeAuth, mockSaveOpencodeAuth } = vi.hoisted(() => ({
   mockReadOpencodeAuth: vi.fn<(...args: unknown[]) => Auth | undefined>(),
+  mockSaveOpencodeAuth: vi.fn<(...args: unknown[]) => boolean>(),
 }))
 
 vi.mock("../../src/lib/auth.js", async () => {
   const actual = await vi.importActual<typeof import("../../src/lib/auth.js")>("../../src/lib/auth.js")
-  return { ...actual, readOpencodeAuth: mockReadOpencodeAuth }
+  return { ...actual, readOpencodeAuth: mockReadOpencodeAuth, saveOpencodeAuth: mockSaveOpencodeAuth }
 })
 
 /** Mock fetch so refreshWorkosToken fails fast in tests (avoids real network). */
@@ -128,6 +129,7 @@ describe("provider.models hook", () => {
 describe("chat.headers hook", () => {
   beforeEach(() => {
     mockReadOpencodeAuth.mockReset()
+    mockSaveOpencodeAuth.mockReset()
   })
   afterEach(restoreFetch)
 
@@ -185,6 +187,37 @@ describe("chat.headers hook", () => {
     expect(output.headers["Authorization"]).toBe("Bearer workos:old-token")
     const errorLogs = client.calls.logs.filter((l) => (l as { level: string }).level === "error")
     expect(errorLogs.length).toBeGreaterThan(0)
+  })
+
+  it("refreshes expired token and calls saveOpencodeAuth on success", async () => {
+    // Mock fetch to return a successful refresh response
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { accessToken: "eyJfresh", refreshToken: "r-fresh" } }),
+      text: async () => "",
+    } as Response)
+    const expires = 1 // expired (epoch 1 ms)
+    mockReadOpencodeAuth.mockReturnValue({
+      type: "oauth",
+      access: "workos:old-token",
+      refresh: "r-old",
+      expires,
+    })
+    const { hooks } = await getHooks()
+    const input = chatInput()
+    const output = chatOutput()
+    await hooks["chat.headers"]!(input as Parameters<NonNullable<(typeof hooks)["chat.headers"]>>[0], output)
+    // Should inject the refreshed token
+    expect(output.headers["Authorization"]).toContain("Bearer workos:eyJfresh")
+    // Should have called saveOpencodeAuth with the new tokens
+    expect(mockSaveOpencodeAuth).toHaveBeenCalledTimes(1)
+    const savedId = mockSaveOpencodeAuth.mock.calls[0][0]
+    expect(savedId).toBe("clinepass")
+    const savedAuth = mockSaveOpencodeAuth.mock.calls[0][1] as Auth
+    expect((savedAuth as { access?: string }).access).toBe("workos:eyJfresh")
+    expect((savedAuth as { refresh?: string }).refresh).toBe("r-fresh")
+    vi.restoreAllMocks()
   })
 })
 
@@ -261,6 +294,39 @@ describe("auth loader hook", () => {
       {} as Parameters<NonNullable<typeof authHook.loader>>[1],
     )
     expect(result).toEqual({})
+  })
+
+  it("falls back to readOpencodeAuth when auth() rejects and file has auth", async () => {
+    mockReadOpencodeAuth.mockReturnValue({
+      type: "oauth",
+      access: "workos:fallback-token",
+      refresh: "r-fb",
+      expires: Date.now() + 3600_000,
+    })
+    const { hooks } = await getHooks()
+    const authHook = hooks.auth!
+    const result = await authHook.loader!(
+      async () => {
+        throw new Error("auth store unavailable")
+      },
+      {} as Parameters<NonNullable<typeof authHook.loader>>[1],
+    )
+    expect(result).toEqual({ apiKey: "workos:fallback-token" })
+    expect(mockReadOpencodeAuth).toHaveBeenCalledWith("clinepass")
+  })
+
+  it("falls back to readOpencodeAuth when auth() returns undefined and file has api auth", async () => {
+    mockReadOpencodeAuth.mockReturnValue({
+      type: "api",
+      key: "ck-file-fallback",
+    })
+    const { hooks } = await getHooks()
+    const authHook = hooks.auth!
+    const result = await authHook.loader!(
+      async () => undefined as unknown as Auth,
+      {} as Parameters<NonNullable<typeof authHook.loader>>[1],
+    )
+    expect(result).toEqual({ apiKey: "ck-file-fallback" })
   })
 })
 
