@@ -2,13 +2,15 @@
  * Unit tests for WorkOS token refresh (src/workos.ts).
  */
 
-import { describe, it, expect, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { refreshWorkosToken } from "../../src/lib/workos.js"
 import { fakeFetch } from "../helpers.js"
 
 describe("refreshWorkosToken", () => {
   it("refreshes via the nested data envelope and adds the workos: prefix", async () => {
-    const f = fakeFetch({ data: { accessToken: "eyJnew", refreshToken: "rnew" } })
+    const f = fakeFetch({
+      data: { accessToken: "eyJnew", refreshToken: "rnew" },
+    })
     const r = await refreshWorkosToken("oldR", { fetch: f })
     expect(r.access).toBe("workos:eyJnew")
     expect(r.refresh).toBe("rnew")
@@ -22,6 +24,27 @@ describe("refreshWorkosToken", () => {
   it("keeps an existing workos: prefix", async () => {
     const f = fakeFetch({ accessToken: "workos:eyJ", refreshToken: "r" })
     expect((await refreshWorkosToken("r", { fetch: f })).access).toBe("workos:eyJ")
+  })
+
+  it("reuses the input refresh token when the response is accessToken-only", async () => {
+    const f = fakeFetch({ data: { accessToken: "eyJnew" } })
+    const r = await refreshWorkosToken("oldR", { fetch: f })
+    expect(r.access).toBe("workos:eyJnew")
+    expect(r.refresh).toBe("oldR")
+  })
+
+  it("honors the server's expiresAt when present", async () => {
+    const expiresAt = new Date(Date.now() + 120_000).toISOString()
+    const f = fakeFetch({
+      data: { accessToken: "eyJnew", refreshToken: "rnew", expiresAt },
+    })
+    const r = await refreshWorkosToken("oldR", { fetch: f })
+    expect(r.expires).toBe(Date.parse(expiresAt))
+  })
+
+  it("rejects when success is false", async () => {
+    const f = fakeFetch({ success: false })
+    await expect(refreshWorkosToken("r", { fetch: f })).rejects.toThrow(/success:false/)
   })
 
   it("throws on non-OK response", async () => {

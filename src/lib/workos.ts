@@ -81,20 +81,29 @@ export async function refreshWorkosToken(
   }
 
   const data = (await response.json()) as {
-    data?: { accessToken?: string; refreshToken?: string }
+    success?: boolean
+    data?: { accessToken?: string; refreshToken?: string; expiresAt?: string }
     accessToken?: string
     refreshToken?: string
+    expiresAt?: string
+  }
+  if (data.success === false) {
+    throw new Error("ClinePass token refresh returned success:false")
   }
   const tokens = data.data ?? data
   const newAccess = stringValue(tokens?.accessToken)
-  const newRefresh = stringValue(tokens?.refreshToken)
-  if (!newAccess || !newRefresh) {
+  // Tolerate accessToken-only responses (no rotated refreshToken).
+  const newRefresh = stringValue(tokens?.refreshToken) ?? refreshToken
+  if (!newAccess) {
     throw new Error("ClinePass token refresh returned an unexpected response format")
   }
+  const expires =
+    (typeof tokens?.expiresAt === "string" ? Date.parse(tokens.expiresAt) : NaN) ||
+    Date.now() + WORKOS_TOKEN_LIFETIME_MS - WORKOS_REFRESH_MARGIN_MS
   const access = isWorkosToken(newAccess) ? newAccess : `${WORKOS_TOKEN_PREFIX}${newAccess}`
   return {
     access,
     refresh: newRefresh,
-    expires: Date.now() + WORKOS_TOKEN_LIFETIME_MS - WORKOS_REFRESH_MARGIN_MS,
+    expires,
   }
 }
