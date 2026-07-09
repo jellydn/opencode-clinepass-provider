@@ -5,15 +5,38 @@
  * @module auth
  */
 
-import type { Auth } from "@opencode-ai/sdk/v2"
-import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { join, dirname } from "node:path"
-import { errMsg, isRecord, stringValue, numberValue } from "./utils.js"
-import { IoOptions, ENV_API_KEY, WORKOS_TOKEN_LIFETIME_MS, CLINE_CLI_AUTH_REL, OPENCODE_AUTH_REL } from "./env.js"
+import { dirname, join } from "node:path"
+import type { Auth } from "@opencode-ai/sdk/v2"
+import { CLINE_CLI_AUTH_REL, ENV_API_KEY, type IoOptions, OPENCODE_AUTH_REL, WORKOS_TOKEN_LIFETIME_MS } from "./env.js"
+import { errMsg, isRecord, jwtExpirySeconds, numberValue, stringValue } from "./utils.js"
+import { ensureValidWorkosToken, type RefreshedToken } from "./workos.js"
 
 function defaultRead(p: string): string {
   return readFileSync(p, "utf-8")
+}
+
+/**
+ * In-memory auth cache (perf: avoids a per-request file read of auth.json).
+ *
+ * Invalidation contract: the cache is written only by two callers —
+ * `setCachedAuth` after the auth loader resolves (or after a token refresh)
+ * and after `persistAuth`. It is never invalidated by `saveOpencodeAuth` on
+ * disk, so a concurrent external change to the file won't be observed until
+ * the next loader/refresh pass. The file read is the cold-start fallback.
+ */
+const authCache = new Map<string, Auth>()
+
+/** Resolve the latest known Auth for a provider — in-memory cache, then file. */
+export function getCachedAuth(id: string, opts: IoOptions = {}): Auth | undefined {
+  return authCache.get(id) ?? readOpencodeAuth(id, opts)
+}
+
+/** Update the in-memory auth cache (called after loader and after refresh). */
+export function setCachedAuth(id: string, auth: Auth | undefined): void {
+  if (auth) authCache.set(id, auth)
+  else authCache.delete(id)
 }
 
 /** Walk Cline CLI providers.json `providers["cline-pass"|"cline"].settings`. */
@@ -82,7 +105,12 @@ export function resolveClineAuthCredentials(opts: IoOptions = {}): ClineAuthCred
       if (!accessToken || !refreshToken) return undefined
       const expiresAt = numberValue(auth.expiresAt) ?? Date.now() + WORKOS_TOKEN_LIFETIME_MS
       const accountId = stringValue(auth.accountId)
-      return { accessToken, refreshToken, expiresAt, accountId } satisfies ClineAuthCredentials
+      return {
+        accessToken,
+        refreshToken,
+        expiresAt,
+        accountId,
+      } satisfies ClineAuthCredentials
     })
     if (creds) return creds
   }
@@ -125,8 +153,58 @@ export function readOpencodeAuth(id: string, opts: IoOptions = {}): Auth | undef
 
 export function oauthAuth(access: string, refresh: string, expires: number, accountId?: string): Auth {
   const a: Auth = { type: "oauth", access, refresh, expires }
-  if (accountId) (a as { accountId?: string }).accountId = accountId
+  if (accountId) a.accountId = accountId
   return a
+}
+
+/**
+ * True expiry (ms since epoch) of an oauth Auth — prefers the JWT `exp` claim,
+ * falling back to the stored `expires` field. Returns 0 for non-oauth auth.
+ */
+export function oauthExpiryMs(a: Auth): number {
+  if (a.type !== "oauth") return 0
+  const jwtExp = jwtExpirySeconds(a.access)
+  if (jwtExp !== undefined) return jwtExp * 1000
+  const stored = a.expires
+  return typeof stored === "number" && Number.isFinite(stored) ? stored : 0
+}
+
+/** Refresh a ClineAuthCredentials, returning the canonical RefreshedToken shape. */
+export async function refreshClineAuthCreds(
+  creds: ClineAuthCredentials,
+  options?: { fetch?: typeof globalThis.fetch },
+): Promise<RefreshedToken> {
+  return ensureValidWorkosToken(creds.accessToken, creds.refreshToken, creds.expiresAt, {
+    fetch: options?.fetch,
+  })
+}
+
+/** Convert a refreshed token into an oauth Auth, carrying over the accountId. */
+export function refreshedToAuth(refreshed: RefreshedToken, accountId?: string): Auth {
+  return oauthAuth(refreshed.access, refreshed.refresh, refreshed.expires, accountId)
+}
+
+/**
+ * Persist an Auth for a provider to both the SDK auth store and the on-disk
+ * auth.json file. The SDK `auth.set` is the runtime credential store; the file
+ * write is a belt-and-suspenders fallback for early-init / store-mismatch
+ * paths. Both writes swallow errors — `auth.set` is wrapped so a rejection
+ * can't break the caller, and `saveOpencodeAuth` is documented as non-throwing.
+ */
+export async function persistAuth(
+  client: {
+    auth: { set(opts: { path: { id: string }; body: Auth }): Promise<unknown> }
+  },
+  id: string,
+  auth: Auth,
+  opts: IoOptions = {},
+): Promise<void> {
+  try {
+    await client.auth.set({ path: { id }, body: auth })
+  } catch {
+    // Non-fatal: the file fallback below persists independently.
+  }
+  saveOpencodeAuth(id, auth, opts)
 }
 
 export function apiAuth(key: string): Auth {
