@@ -34,11 +34,17 @@ export {
   type ClineAuthCredentials,
   clineCliAuthPaths,
   extractKey,
+  getCachedAuth,
   oauthAuth,
+  oauthExpiryMs,
   opencodeAuthPaths,
+  persistAuth,
   readOpencodeAuth,
+  refreshClineAuthCreds,
+  refreshedToAuth,
   resolveClineAuthCredentials,
   resolveClineStaticKey,
+  setCachedAuth,
 } from "./lib/auth.js"
 
 // env
@@ -89,24 +95,26 @@ export {
 import {
   apiAuth,
   extractKey,
-  oauthAuth,
+  getCachedAuth,
+  oauthExpiryMs,
+  persistAuth,
   readOpencodeAuth,
+  refreshClineAuthCreds,
+  refreshedToAuth,
   resolveClineAuthCredentials,
   resolveClineStaticKey,
-  saveOpencodeAuth,
+  setCachedAuth,
 } from "./lib/auth.js"
 import { DASHBOARD_URL, type IoOptions, PROVIDER_ID, sanitizeApiKey } from "./lib/env.js"
 import { classifyClinePassError } from "./lib/errors.js"
 import { fetchRemoteModels, injectProviderConfig, modelsToConfig } from "./lib/models.js"
-import { errMsg, jwtExpirySeconds } from "./lib/utils.js"
-import { ensureValidWorkosToken } from "./lib/workos.js"
+import { errMsg } from "./lib/utils.js"
 
 /**
- * In-memory cache for the resolved Auth object, set by the auth.loader hook
- * and read by chat.headers to avoid per-request file IO reading opencode's
- * auth.json on every LLM call. Also updated on token refresh.
+ * In-memory auth cache lives in lib/auth.ts (getCachedAuth / setCachedAuth) —
+ * it avoids a per-request file read of auth.json on every LLM call. The loader
+ * writes it on each request; chat.headers reads it (falling back to the file).
  */
-let latestAuth: Auth | undefined
 
 /** Minimal client surface used by the plugin (for testability). */
 export interface ClientLike {
@@ -121,6 +129,12 @@ export interface ClientLike {
       }
     }): Promise<unknown>
   }
+}
+
+/** Minimal event shape consumed by the `event` hook (honest boundary cast). */
+interface EventLike {
+  type?: string
+  properties?: { error?: { message?: string } }
 }
 
 /** Shared logger helper — avoids duplicating the log closure in both plugin body and autoImportCredentials. */
@@ -146,53 +160,26 @@ export async function autoImportCredentials(
 
   const creds = resolveClineAuthCredentials(opts)
   if (creds) {
-    const { accountId } = creds
-    let accessToken: string
-    let refreshToken: string
-    let expiresAt: number
     try {
-      const r = await ensureValidWorkosToken(creds.accessToken, creds.refreshToken, creds.expiresAt, {
+      const refreshed = await refreshClineAuthCreds(creds, {
         fetch: opts.fetch,
       })
-      accessToken = r.access
-      refreshToken = r.refresh
-      expiresAt = r.expires
+      const authBody = refreshedToAuth(refreshed, creds.accountId)
+      await persistAuth(client, PROVIDER_ID, authBody, opts)
+      await log("info", "ClinePass: imported your Cline CLI subscription automatically.")
     } catch (e) {
       await log("warn", "Cline CLI token needs refresh — run /connect, select ClinePass to re-authenticate.", {
         error: errMsg(e),
       })
-      return
     }
-    const authBody = oauthAuth(accessToken, refreshToken, expiresAt, accountId)
-    try {
-      await client.auth.set({
-        path: { id: PROVIDER_ID },
-        body: authBody,
-      })
-      await log("info", "ClinePass: imported your Cline CLI subscription automatically.")
-    } catch (e) {
-      await log("error", "ClinePass: failed to import Cline CLI credentials via SDK.", {
-        error: errMsg(e),
-      })
-    }
-    // Belt-and-suspenders: also persist directly to auth.json in case the
-    // SDK's server API doesn't flush to the file (e.g. early-init timing).
-    saveOpencodeAuth(PROVIDER_ID, authBody, opts)
     return
   }
 
   const key = resolveClineStaticKey(opts)
   if (key) {
     const apiBody = apiAuth(key)
-    try {
-      await client.auth.set({ path: { id: PROVIDER_ID }, body: apiBody })
-      await log("info", "ClinePass: imported your CLINE_API_KEY automatically.")
-    } catch (e) {
-      await log("error", "ClinePass: failed to import API key via SDK.", {
-        error: errMsg(e),
-      })
-    }
-    saveOpencodeAuth(PROVIDER_ID, apiBody, opts)
+    await persistAuth(client, PROVIDER_ID, apiBody, opts)
+    await log("info", "ClinePass: imported your CLINE_API_KEY automatically.")
     return
   }
 
@@ -229,8 +216,9 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
     // store doesn't have the entry (e.g. v1/v2 store mismatch, startup timing).
     loader: async (auth) => {
       const a = (await auth().catch(() => undefined)) as Auth | undefined
-      latestAuth = a ?? readOpencodeAuth(PROVIDER_ID)
-      const key = extractKey(latestAuth)
+      const resolved = a ?? readOpencodeAuth(PROVIDER_ID)
+      setCachedAuth(PROVIDER_ID, resolved)
+      const key = extractKey(resolved)
       return key ? { apiKey: key } : {}
     },
     methods: [
@@ -249,14 +237,21 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
             }
           }
           const { accountId } = creds
-          let accessToken: string
-          let refreshToken: string
-          let expiresAt: number
           try {
-            const r = await ensureValidWorkosToken(creds.accessToken, creds.refreshToken, creds.expiresAt)
-            accessToken = r.access
-            refreshToken = r.refresh
-            expiresAt = r.expires
+            const refreshed = await refreshClineAuthCreds(creds)
+            return {
+              url: "https://app.cline.bot",
+              instructions:
+                "Reusing your Cline CLI login (WorkOS). You can close the browser tab if one opened — no action needed.",
+              method: "auto",
+              callback: async () => ({
+                type: "success" as const,
+                access: refreshed.access,
+                refresh: refreshed.refresh,
+                expires: refreshed.expires,
+                ...(accountId ? { accountId } : {}),
+              }),
+            }
           } catch {
             return {
               url: DASHBOARD_URL,
@@ -265,19 +260,6 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
               method: "auto",
               callback: async () => ({ type: "failed" as const }),
             }
-          }
-          return {
-            url: "https://app.cline.bot",
-            instructions:
-              "Reusing your Cline CLI login (WorkOS). You can close the browser tab if one opened — no action needed.",
-            method: "auto",
-            callback: async () => ({
-              type: "success" as const,
-              access: accessToken,
-              refresh: refreshToken,
-              expires: expiresAt,
-              ...(accountId ? { accountId } : {}),
-            }),
           }
         },
       },
@@ -339,48 +321,39 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
     "chat.headers": async (input, output) => {
       const providerInfo = input.provider?.info
       if (providerInfo?.id !== PROVIDER_ID) return
-      const a = latestAuth ?? readOpencodeAuth(PROVIDER_ID)
+      const a = getCachedAuth(PROVIDER_ID)
       if (!a || a.type !== "oauth") return
-      // Prefer the token's own JWT `exp` claim for true expiry, since
-      // opencode's auth store may not reliably round-trip the custom
-      // `expires` field. Fall back to the stored `expires` (ms) otherwise.
-      const jwtExp = jwtExpirySeconds(a.access)
-      const storedMs = (a as { expires?: number }).expires
-      const expiresMs =
-        jwtExp !== undefined ? jwtExp * 1000 : typeof storedMs === "number" && Number.isFinite(storedMs) ? storedMs : 0
-      let token = a.access
-      let sendToken = true
       try {
-        const r = await ensureValidWorkosToken(a.access, a.refresh, expiresMs)
-        if (r.access !== a.access) {
-          token = r.access
-          const updated = oauthAuth(r.access, r.refresh, r.expires, (a as { accountId?: string }).accountId)
-          latestAuth = updated
-          // Save via SDK API for the runtime credential store
-          client.auth.set({ path: { id: PROVIDER_ID }, body: updated }).catch(() => {})
-          // Also persist directly to auth.json so readOpencodeAuth always sees
-          // fresh tokens on subsequent requests and across restarts.
-          saveOpencodeAuth(PROVIDER_ID, updated)
+        const refreshed = await refreshClineAuthCreds({
+          accessToken: a.access,
+          refreshToken: a.refresh,
+          expiresAt: oauthExpiryMs(a),
+        })
+        if (refreshed.access !== a.access) {
+          const updated = refreshedToAuth(refreshed, a.accountId)
+          setCachedAuth(PROVIDER_ID, updated)
+          // Save via SDK API for the runtime credential store, and to
+          // auth.json so readOpencodeAuth always sees fresh tokens across
+          // restarts (belt-and-suspenders fallback for early-init mismatch).
+          await persistAuth(client, PROVIDER_ID, updated)
           await log("info", "ClinePass: refreshed WorkOS access token.")
         }
+        output.headers["Authorization"] = `Bearer ${refreshed.access}`
       } catch (e) {
         await log("error", "ClinePass: token refresh failed — re-run /connect to re-authenticate.", {
           error: errMsg(e),
         })
         // Don't send a stale bearer when the token is already expired and
         // unrecoverable — sending it guarantees a 401 and masks the failure.
-        if (expiresMs <= Date.now()) sendToken = false
+        if (oauthExpiryMs(a) <= Date.now()) return
+        output.headers["Authorization"] = `Bearer ${a.access}`
       }
-      if (sendToken) output.headers["Authorization"] = `Bearer ${token}`
     },
 
     // Surface friendly ClinePass errors (403/401/429) into the opencode log.
     // Classify all errors, but only log non-unknown ones to avoid noise.
     event: async (input) => {
-      const ev = input.event as unknown as {
-        type?: string
-        properties?: { error?: { message?: string } }
-      }
+      const ev = input.event as unknown as EventLike
       if (ev?.type !== "session.next.step.failed") return
       const msg = ev?.properties?.error?.message ?? ""
       if (typeof msg !== "string" || !msg) return

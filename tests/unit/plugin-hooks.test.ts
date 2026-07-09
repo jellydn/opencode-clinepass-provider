@@ -11,8 +11,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ClinePassPlugin, PROVIDER_ID } from "../../src/clinepass.js"
 import { fakeClient } from "../helpers.js"
 
-// Mock readOpencodeAuth so chat.headers tests don't read the real filesystem.
-// vi.mock is hoisted above top-level code, so the mock fn must be defined in vi.hoisted().
+// Mock readOpencodeAuth / saveOpencodeAuth so chat.headers tests don't touch
+// the real filesystem. getCachedAuth and persistAuth live in auth.ts and call
+// those helpers internally; a partial vi.mock only overrides the module's
+// exports, so the hook path must route them through the mocks too.
+// vi.mock is hoisted above top-level code, so the mock fns must be defined in vi.hoisted().
 const { mockReadOpencodeAuth, mockSaveOpencodeAuth } = vi.hoisted(() => ({
   mockReadOpencodeAuth: vi.fn<(...args: unknown[]) => Auth | undefined>(),
   mockSaveOpencodeAuth: vi.fn<(...args: unknown[]) => boolean>(),
@@ -24,6 +27,10 @@ vi.mock("../../src/lib/auth.js", async () => {
     ...actual,
     readOpencodeAuth: mockReadOpencodeAuth,
     saveOpencodeAuth: mockSaveOpencodeAuth,
+    getCachedAuth: (id: string, opts: unknown) => mockReadOpencodeAuth(id, opts),
+    persistAuth: async (_client: unknown, id: string, auth: Auth, opts: unknown) => {
+      mockSaveOpencodeAuth(id, auth, opts)
+    },
   }
 })
 
