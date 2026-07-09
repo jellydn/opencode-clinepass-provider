@@ -5,9 +5,9 @@
  * verifying that each hook behaves correctly with controlled inputs.
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest"
-import type { Auth } from "@opencode-ai/sdk/v2"
 import type { Config } from "@opencode-ai/plugin"
+import type { Auth } from "@opencode-ai/sdk/v2"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ClinePassPlugin, PROVIDER_ID } from "../../src/clinepass.js"
 import { fakeClient } from "../helpers.js"
 
@@ -20,7 +20,11 @@ const { mockReadOpencodeAuth, mockSaveOpencodeAuth } = vi.hoisted(() => ({
 
 vi.mock("../../src/lib/auth.js", async () => {
   const actual = await vi.importActual<typeof import("../../src/lib/auth.js")>("../../src/lib/auth.js")
-  return { ...actual, readOpencodeAuth: mockReadOpencodeAuth, saveOpencodeAuth: mockSaveOpencodeAuth }
+  return {
+    ...actual,
+    readOpencodeAuth: mockReadOpencodeAuth,
+    saveOpencodeAuth: mockSaveOpencodeAuth,
+  }
 })
 
 /** Mock fetch so refreshWorkosToken fails fast in tests (avoids real network). */
@@ -119,7 +123,12 @@ describe("provider.models hook", () => {
     const { hooks } = await getHooks()
     const providerHook = hooks.provider!
     const result = await providerHook.models!({} as Parameters<NonNullable<typeof providerHook.models>>[0], {
-      auth: { type: "oauth", access: "workos:eyJ", refresh: "r", expires: Date.now() + 9999 },
+      auth: {
+        type: "oauth",
+        access: "workos:eyJ",
+        refresh: "r",
+        expires: Date.now() + 9999,
+      },
     })
     expect(result).toBeDefined()
     expect(Object.keys(result!).length).toBeGreaterThanOrEqual(10)
@@ -184,9 +193,11 @@ describe("chat.headers hook", () => {
     const input = chatInput()
     const output = chatOutput()
     await hooks["chat.headers"]!(input as Parameters<NonNullable<(typeof hooks)["chat.headers"]>>[0], output)
-    expect(output.headers["Authorization"]).toBe("Bearer workos:old-token")
+    // Expired token + unrecoverable refresh failure: fail-safe must NOT send a stale bearer.
+    expect(output.headers["Authorization"]).toBeUndefined()
     const errorLogs = client.calls.logs.filter((l) => (l as { level: string }).level === "error")
     expect(errorLogs.length).toBeGreaterThan(0)
+    expect(String((errorLogs[0] as { message: string }).message)).toMatch(/refresh failed/i)
   })
 
   it("refreshes expired token and calls saveOpencodeAuth on success", async () => {
@@ -194,7 +205,9 @@ describe("chat.headers hook", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => ({ data: { accessToken: "eyJfresh", refreshToken: "r-fresh" } }),
+      json: async () => ({
+        data: { accessToken: "eyJfresh", refreshToken: "r-fresh" },
+      }),
       text: async () => "",
     } as Response)
     const expires = 1 // expired (epoch 1 ms)
@@ -333,7 +346,9 @@ describe("auth loader hook", () => {
 describe("event hook", () => {
   it("is a no-op for non-session events", async () => {
     const { hooks, client } = await getHooks()
-    hooks.event!({ event: { type: "some.other.event" } } as unknown as Parameters<NonNullable<typeof hooks.event>>[0])
+    hooks.event!({
+      event: { type: "some.other.event" },
+    } as unknown as Parameters<NonNullable<typeof hooks.event>>[0])
     const errorLogs = client.calls.logs.filter((l) => (l as { level: string }).level === "error")
     expect(errorLogs).toHaveLength(0)
   })

@@ -77,7 +77,7 @@ export {
   type ThinkingLevelMap,
 } from "./lib/models.js"
 // utils
-export { errMsg, isRecord, numberValue, stringValue } from "./lib/utils.js"
+export { errMsg, isRecord, jwtExpirySeconds, numberValue, stringValue } from "./lib/utils.js"
 // workos
 export {
   ensureValidWorkosToken,
@@ -98,7 +98,7 @@ import {
 import { DASHBOARD_URL, type IoOptions, PROVIDER_ID, sanitizeApiKey } from "./lib/env.js"
 import { classifyClinePassError } from "./lib/errors.js"
 import { fetchRemoteModels, injectProviderConfig, modelsToConfig } from "./lib/models.js"
-import { errMsg } from "./lib/utils.js"
+import { errMsg, jwtExpirySeconds } from "./lib/utils.js"
 import { ensureValidWorkosToken } from "./lib/workos.js"
 
 /**
@@ -341,9 +341,17 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
       if (providerInfo?.id !== PROVIDER_ID) return
       const a = latestAuth ?? readOpencodeAuth(PROVIDER_ID)
       if (!a || a.type !== "oauth") return
+      // Prefer the token's own JWT `exp` claim for true expiry, since
+      // opencode's auth store may not reliably round-trip the custom
+      // `expires` field. Fall back to the stored `expires` (ms) otherwise.
+      const jwtExp = jwtExpirySeconds(a.access)
+      const storedMs = (a as { expires?: number }).expires
+      const expiresMs =
+        jwtExp !== undefined ? jwtExp * 1000 : typeof storedMs === "number" && Number.isFinite(storedMs) ? storedMs : 0
       let token = a.access
+      let sendToken = true
       try {
-        const r = await ensureValidWorkosToken(a.access, a.refresh, a.expires)
+        const r = await ensureValidWorkosToken(a.access, a.refresh, expiresMs)
         if (r.access !== a.access) {
           token = r.access
           const updated = oauthAuth(r.access, r.refresh, r.expires, (a as { accountId?: string }).accountId)
@@ -356,11 +364,14 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
           await log("info", "ClinePass: refreshed WorkOS access token.")
         }
       } catch (e) {
-        await log("error", "ClinePass: token refresh failed — requests may fail until you re-authenticate.", {
+        await log("error", "ClinePass: token refresh failed — re-run /connect to re-authenticate.", {
           error: errMsg(e),
         })
+        // Don't send a stale bearer when the token is already expired and
+        // unrecoverable — sending it guarantees a 401 and masks the failure.
+        if (expiresMs <= Date.now()) sendToken = false
       }
-      output.headers["Authorization"] = `Bearer ${token}`
+      if (sendToken) output.headers["Authorization"] = `Bearer ${token}`
     },
 
     // Surface friendly ClinePass errors (403/401/429) into the opencode log.
