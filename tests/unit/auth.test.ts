@@ -11,6 +11,9 @@ import {
   saveOpencodeAuth,
   oauthAuth,
   apiAuth,
+  getCachedAuth,
+  setCachedAuth,
+  persistAuth,
 } from "../../src/lib/auth.js"
 import { clineProvidersJson, ioFor, ioByPath, AUTH_PATH } from "../helpers.js"
 
@@ -182,5 +185,29 @@ describe("saveOpencodeAuth", () => {
     const result = saveOpencodeAuth("clinepass", apiAuth("ck"), allBad)
     expect(result).toBe(false)
     expect(writeFile).not.toHaveBeenCalled()
+  })
+})
+
+describe("persistAuth", () => {
+  it("updates the in-memory cache so getCachedAuth returns the persisted auth", async () => {
+    setCachedAuth("clinepass", undefined)
+    const writeFile = vi.fn()
+    const rename = vi.fn()
+    const mkdir = vi.fn()
+    const opts = {
+      ...ioByPath({ [AUTH_PATH]: "{}" }),
+      writeFile,
+      rename,
+      mkdir,
+    }
+    const client = {
+      auth: {
+        set: async () => true,
+      },
+    }
+    const auth = apiAuth("ck-persisted")
+    await persistAuth(client, "clinepass", auth, opts)
+    expect(getCachedAuth("clinepass", { fileExists: () => false, readFile: () => "{}" })).toEqual(auth)
+    setCachedAuth("clinepass", undefined)
   })
 })

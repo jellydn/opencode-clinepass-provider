@@ -20,9 +20,9 @@ function defaultRead(p: string): string {
 /**
  * In-memory auth cache (perf: avoids a per-request file read of auth.json).
  *
- * Invalidation contract: the cache is written only by two callers —
- * `setCachedAuth` after the auth loader resolves (or after a token refresh)
- * and after `persistAuth`. It is never invalidated by `saveOpencodeAuth` on
+ * Invalidation contract: the cache is written by `setCachedAuth` (auth loader
+ * and refresh paths) and by `persistAuth` (which always ends with
+ * `setCachedAuth`). It is never invalidated by a bare `saveOpencodeAuth` on
  * disk, so a concurrent external change to the file won't be observed until
  * the next loader/refresh pass. The file read is the cold-start fallback.
  */
@@ -33,7 +33,7 @@ export function getCachedAuth(id: string, opts: IoOptions = {}): Auth | undefine
   return authCache.get(id) ?? readOpencodeAuth(id, opts)
 }
 
-/** Update the in-memory auth cache (called after loader and after refresh). */
+/** Update the in-memory auth cache (loader, refresh, and persistAuth). */
 export function setCachedAuth(id: string, auth: Auth | undefined): void {
   if (auth) authCache.set(id, auth)
   else authCache.delete(id)
@@ -151,6 +151,7 @@ export function readOpencodeAuth(id: string, opts: IoOptions = {}): Auth | undef
   return undefined
 }
 
+/** Build an oauth Auth record for the OpenCode auth store. */
 export function oauthAuth(access: string, refresh: string, expires: number, accountId?: string): Auth {
   const a: Auth = { type: "oauth", access, refresh, expires }
   if (accountId) a.accountId = accountId
@@ -205,8 +206,11 @@ export async function persistAuth(
     // Non-fatal: the file fallback below persists independently.
   }
   saveOpencodeAuth(id, auth, opts)
+  // Keep the in-memory cache in sync so getCachedAuth sees the write without a file re-read.
+  setCachedAuth(id, auth)
 }
 
+/** Build an api Auth record for a static ClinePass API key. */
 export function apiAuth(key: string): Auth {
   return { type: "api", key }
 }
