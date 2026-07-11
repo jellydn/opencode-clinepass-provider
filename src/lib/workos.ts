@@ -13,7 +13,7 @@ import {
   WORKOS_TOKEN_LIFETIME_MS,
   WORKOS_TOKEN_PREFIX,
 } from "./env.js"
-import { stringValue } from "./utils.js"
+import { numberValue, stringValue } from "./utils.js"
 
 export interface WorkosRefreshOptions {
   fetch?: typeof globalThis.fetch
@@ -82,10 +82,10 @@ export async function refreshWorkosToken(
 
   const data = (await response.json()) as {
     success?: boolean
-    data?: { accessToken?: string; refreshToken?: string; expiresAt?: string }
+    data?: { accessToken?: string; refreshToken?: string; expiresAt?: string | number }
     accessToken?: string
     refreshToken?: string
-    expiresAt?: string
+    expiresAt?: string | number
   }
   if (data.success === false) {
     throw new Error("ClinePass token refresh returned success:false")
@@ -97,13 +97,28 @@ export async function refreshWorkosToken(
   if (!newAccess) {
     throw new Error("ClinePass token refresh returned an unexpected response format")
   }
-  const expires =
-    (typeof tokens?.expiresAt === "string" ? Date.parse(tokens.expiresAt) : NaN) ||
-    Date.now() + WORKOS_TOKEN_LIFETIME_MS - WORKOS_REFRESH_MARGIN_MS
+  // Prefer server expiresAt (ISO string or numeric epoch ms/seconds); else synthetic lifetime.
+  const expires = parseExpiresAt(tokens?.expiresAt) ?? Date.now() + WORKOS_TOKEN_LIFETIME_MS - WORKOS_REFRESH_MARGIN_MS
   const access = isWorkosToken(newAccess) ? newAccess : `${WORKOS_TOKEN_PREFIX}${newAccess}`
   return {
     access,
     refresh: newRefresh,
     expires,
   }
+}
+
+/**
+ * Parse a refresh-response `expiresAt` into ms since epoch.
+ * Accepts ISO strings, numeric ms (>1e12), or numeric seconds.
+ * Returns undefined when the value is missing or unparseable.
+ */
+function parseExpiresAt(value: string | number | undefined): number | undefined {
+  if (typeof value === "string") {
+    const ms = Date.parse(value)
+    return Number.isFinite(ms) ? ms : undefined
+  }
+  const n = numberValue(value)
+  if (n === undefined) return undefined
+  // Heuristic: values below 1e12 are seconds (JWT-style); larger are already ms.
+  return n < 1e12 ? n * 1000 : n
 }

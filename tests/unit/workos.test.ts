@@ -33,13 +33,31 @@ describe("refreshWorkosToken", () => {
     expect(r.refresh).toBe("oldR")
   })
 
-  it("honors the server's expiresAt when present", async () => {
+  it("honors the server's expiresAt when present as an ISO string", async () => {
     const expiresAt = new Date(Date.now() + 120_000).toISOString()
     const f = fakeFetch({
       data: { accessToken: "eyJnew", refreshToken: "rnew", expiresAt },
     })
     const r = await refreshWorkosToken("oldR", { fetch: f })
     expect(r.expires).toBe(Date.parse(expiresAt))
+  })
+
+  it("honors the server's expiresAt when present as numeric epoch ms", async () => {
+    const expiresAt = Date.now() + 180_000
+    const f = fakeFetch({
+      data: { accessToken: "eyJnew", refreshToken: "rnew", expiresAt },
+    })
+    const r = await refreshWorkosToken("oldR", { fetch: f })
+    expect(r.expires).toBe(expiresAt)
+  })
+
+  it("honors the server's expiresAt when present as numeric epoch seconds", async () => {
+    const expiresSec = Math.floor(Date.now() / 1000) + 300
+    const f = fakeFetch({
+      data: { accessToken: "eyJnew", refreshToken: "rnew", expiresAt: expiresSec },
+    })
+    const r = await refreshWorkosToken("oldR", { fetch: f })
+    expect(r.expires).toBe(expiresSec * 1000)
   })
 
   it("rejects when success is false", async () => {
