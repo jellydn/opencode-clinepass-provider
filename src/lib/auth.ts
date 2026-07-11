@@ -9,7 +9,14 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Auth } from "@opencode-ai/sdk/v2"
-import { CLINE_CLI_AUTH_REL, ENV_API_KEY, type IoOptions, OPENCODE_AUTH_REL, WORKOS_TOKEN_LIFETIME_MS } from "./env.js"
+import {
+  CLINE_CLI_AUTH_REL,
+  ENV_API_KEY,
+  type IoOptions,
+  OPENCODE_AUTH_REL,
+  sanitizeApiKey,
+  WORKOS_TOKEN_LIFETIME_MS,
+} from "./env.js"
 import { errMsg, isRecord, jwtExpirySeconds, numberValue, stringValue } from "./utils.js"
 import { ensureValidWorkosToken, type RefreshedToken } from "./workos.js"
 
@@ -120,15 +127,20 @@ export function resolveClineAuthCredentials(opts: IoOptions = {}): ClineAuthCred
 /**
  * Resolve a static ClinePass API key (long-lived).
  * Priority: CLINE_API_KEY env → Cline CLI providers.json settings.apiKey.
+ * Sanitizes paste wrappers/control chars so terminal-exported keys work.
  */
 export function resolveClineStaticKey(opts: IoOptions = {}): string | undefined {
   const env = opts.env ?? process.env
-  if (env[ENV_API_KEY]) return env[ENV_API_KEY]
+  const fromEnv = sanitizeApiKey(env[ENV_API_KEY] ?? "")
+  if (fromEnv) return fromEnv
   const home = opts.homeDir?.() ?? homedir()
   for (const path of clineCliAuthPaths(home)) {
     const parsed = readJsonFile(path, opts)
     if (!parsed) continue
-    const key = walkClineProviderSettings(parsed, (settings) => stringValue(settings.apiKey))
+    const key = walkClineProviderSettings(parsed, (settings) => {
+      const raw = stringValue(settings.apiKey)
+      return raw ? sanitizeApiKey(raw) : undefined
+    })
     if (key) return key
   }
   return undefined

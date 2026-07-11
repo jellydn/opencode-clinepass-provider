@@ -146,8 +146,12 @@ describe("chat.headers hook", () => {
   beforeEach(() => {
     mockReadOpencodeAuth.mockReset()
     mockSaveOpencodeAuth.mockReset()
+    delete process.env.CLINE_API_KEY
   })
-  afterEach(restoreFetch)
+  afterEach(() => {
+    restoreFetch()
+    delete process.env.CLINE_API_KEY
+  })
 
   it("is a no-op for non-clinepass providers", async () => {
     const { hooks } = await getHooks()
@@ -186,6 +190,21 @@ describe("chat.headers hook", () => {
     const output = chatOutput()
     await hooks["chat.headers"]!(input as Parameters<NonNullable<(typeof hooks)["chat.headers"]>>[0], output)
     expect(output.headers["authorization"]).toBe("Bearer workos:test-token")
+  })
+
+  it("is a no-op when CLINE_API_KEY is set (static key path)", async () => {
+    process.env.CLINE_API_KEY = "ck-env-static-for-headers"
+    mockReadOpencodeAuth.mockReturnValue({
+      type: "oauth",
+      access: "workos:should-not-use",
+      refresh: "r",
+      expires: Date.now() + 3600_000,
+    })
+    const { hooks } = await getHooks()
+    const input = chatInput()
+    const output = chatOutput()
+    await hooks["chat.headers"]!(input as Parameters<NonNullable<(typeof hooks)["chat.headers"]>>[0], output)
+    expect(output.headers["authorization"]).toBeUndefined()
   })
 
   it("handles expired oauth token refresh failure gracefully", async () => {
@@ -243,6 +262,13 @@ describe("chat.headers hook", () => {
 })
 
 describe("auth loader hook", () => {
+  beforeEach(() => {
+    delete process.env.CLINE_API_KEY
+  })
+  afterEach(() => {
+    delete process.env.CLINE_API_KEY
+  })
+
   it("returns dummy apiKey + custom fetch for oauth auth", async () => {
     const { hooks } = await getHooks()
     const authHook = hooks.auth!
@@ -258,6 +284,22 @@ describe("auth loader hook", () => {
     // Dummy key so openai-compatible doesn't stamp the real (possibly expired) token.
     expect(result.apiKey).toBe("clinepass-oauth")
     expect(typeof result.fetch).toBe("function")
+  })
+
+  it("prefers CLINE_API_KEY over stored oauth auth", async () => {
+    process.env.CLINE_API_KEY = "ck-env-loader-wins"
+    const { hooks } = await getHooks()
+    const authHook = hooks.auth!
+    const result = await authHook.loader!(
+      async () => ({
+        type: "oauth" as const,
+        access: "workos:should-not-use",
+        refresh: "r",
+        expires: Date.now() + 3600_000,
+      }),
+      {} as Parameters<NonNullable<typeof authHook.loader>>[1],
+    )
+    expect(result).toEqual({ apiKey: "ck-env-loader-wins" })
   })
 
   it("returns { apiKey } for api auth", async () => {

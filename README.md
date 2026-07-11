@@ -149,9 +149,14 @@ server-side endpoint (see [How WorkOS token refresh works](#how-workos-token-ref
 4. Set the environment variable:
 
 ```bash
+export CLINE_API_KEY="your_key_here"
+# optional: persist for new shells
 echo 'export CLINE_API_KEY="your_key_here"' >> ~/.zshrc
-source ~/.zshrc
 ```
+
+Then restart Opencode (or run a one-shot command in the same shell). The plugin
+picks up `CLINE_API_KEY` on every request — even if OAuth credentials are already
+stored from a previous `/connect` or Cline CLI login.
 
 Alternatively, run `/connect` in Opencode, select **ClinePass**, and choose
 **Static API key** — if no Cline CLI login is detected, it opens the Cline
@@ -203,10 +208,10 @@ Opencode's auth store. If the refresh token is revoked (e.g. you re-run
 
 ## Environment variables
 
-| Variable         | Default                 | Purpose                                                |
-| ---------------- | ----------------------- | ------------------------------------------------------ |
-| `CLINE_API_KEY`  | —                       | A static ClinePass API key (auto-imported on startup). |
-| `CLINE_API_BASE` | `https://api.cline.bot` | Override the Cline API base URL.                       |
+| Variable         | Default                 | Purpose                                                                                                                                 |
+| ---------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLINE_API_KEY`  | —                       | Static ClinePass API key. When set, it is used for every request (wins over stored OAuth). Export it and restart — no `/connect` needed. |
+| `CLINE_API_BASE` | `https://api.cline.bot` | Override the Cline API base URL.                                                                                                        |
 
 ## Development
 

@@ -156,6 +156,20 @@ export async function autoImportCredentials(
 ): Promise<void> {
   const log = makeLogger(client)
 
+  // Prefer a static key (CLINE_API_KEY / providers.json apiKey) when present —
+  // even if oauth is already stored — so `export CLINE_API_KEY=…` just works.
+  // Only skip when the store already has this exact api key (avoid clobber churn).
+  const key = resolveClineStaticKey(opts)
+  if (key) {
+    const existing = readOpencodeAuth(PROVIDER_ID, opts)
+    if (existing?.type === "api" && existing.key === key) return
+    const apiBody = apiAuth(key)
+    await persistAuth(client, PROVIDER_ID, apiBody, opts)
+    setCachedAuth(PROVIDER_ID, apiBody)
+    await log("info", "ClinePass: using CLINE_API_KEY (static API key).")
+    return
+  }
+
   if (readOpencodeAuth(PROVIDER_ID, opts)) return // already configured — don't clobber
 
   const creds = resolveClineAuthCredentials(opts)
@@ -172,14 +186,6 @@ export async function autoImportCredentials(
         error: errMsg(e),
       })
     }
-    return
-  }
-
-  const key = resolveClineStaticKey(opts)
-  if (key) {
-    const apiBody = apiAuth(key)
-    await persistAuth(client, PROVIDER_ID, apiBody, opts)
-    await log("info", "ClinePass: imported your CLINE_API_KEY automatically.")
     return
   }
 
@@ -247,13 +253,22 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
   const authHook: AuthHook = {
     provider: PROVIDER_ID,
     // Feed credentials into the openai-compatible provider.
-    // Static API keys: return as apiKey (SDK builds Authorization: Bearer).
-    // WorkOS OAuth: return a dummy apiKey + custom fetch that injects a
-    // freshly-refreshed bearer. Returning the raw (possibly expired) access
-    // token as apiKey lets the AI SDK stamp a stale Authorization header that
-    // can win over chat.headers — matching OpenCode's xAI OAuth pattern.
-    // Falls back to reading auth.json if the SDK's auth() store is empty.
+    // Priority for seamless use:
+    //   1. CLINE_API_KEY env (or Cline CLI static apiKey) — always wins when set
+    //   2. Stored oauth → dummy apiKey + custom fetch (fresh WorkOS bearer)
+    //   3. Stored api/wellknown key from auth.json
+    // Returning a raw (possibly expired) WorkOS access token as apiKey lets the
+    // AI SDK stamp a stale Authorization header that can win over chat.headers —
+    // so oauth uses a dummy key + fetch wrapper (OpenCode xAI OAuth pattern).
     loader: async (auth) => {
+      // Env static key wins even when oauth is already stored — export
+      // CLINE_API_KEY and it just works without /connect or re-import.
+      const envKey = resolveClineStaticKey()
+      if (envKey) {
+        setCachedAuth(PROVIDER_ID, apiAuth(envKey))
+        return { apiKey: envKey }
+      }
+
       const a = (await auth().catch(() => undefined)) as Auth | undefined
       const resolved = a ?? readOpencodeAuth(PROVIDER_ID)
       setCachedAuth(PROVIDER_ID, resolved)
@@ -373,11 +388,13 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
     // Belt-and-suspenders with the oauth loader's custom fetch: also inject a
     // fresh Authorization via chat.headers. Use lowercase `authorization` so
     // intermediate plain-object merges don't leave a duplicate Authorization.
-    // Static keys are handled by the loader's apiKey option — this only acts
-    // for oauth credentials.
+    // Skip entirely when CLINE_API_KEY (or a stored static key) is in use —
+    // the loader's apiKey option already supplies the bearer.
     "chat.headers": async (input, output) => {
       const providerInfo = input.provider?.info
       if (providerInfo?.id !== PROVIDER_ID) return
+      // Env/static key path: do not override with WorkOS oauth.
+      if (resolveClineStaticKey()) return
       const a = getCachedAuth(PROVIDER_ID)
       if (!a || a.type !== "oauth") return
       const token = await resolveFreshOauthAccess()

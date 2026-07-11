@@ -53,8 +53,27 @@ describe("resolveClineAuthCredentials", () => {
 
 describe("resolveClineStaticKey", () => {
   it("prefers CLINE_API_KEY env var", () => {
-    const opts = { ...ioFor(clineProvidersJson({ clinePassApiKey: "from-file" })), env: { CLINE_API_KEY: "from-env" } }
-    expect(resolveClineStaticKey(opts)).toBe("from-env")
+    const opts = {
+      ...ioFor(clineProvidersJson({ clinePassApiKey: "from-file" })),
+      env: { CLINE_API_KEY: "from-env-key" },
+    }
+    expect(resolveClineStaticKey(opts)).toBe("from-env-key")
+  })
+
+  it("sanitizes paste wrappers from CLINE_API_KEY", () => {
+    const opts = {
+      ...ioFor(clineProvidersJson({})),
+      env: { CLINE_API_KEY: "[200~ck-pasted-key[201~" },
+    }
+    expect(resolveClineStaticKey(opts)).toBe("ck-pasted-key")
+  })
+
+  it("treats whitespace-only CLINE_API_KEY as missing", () => {
+    const opts = {
+      ...ioFor(clineProvidersJson({ clinePassApiKey: "from-file" })),
+      env: { CLINE_API_KEY: "   " },
+    }
+    expect(resolveClineStaticKey(opts)).toBe("from-file")
   })
 
   it("reads settings.apiKey from providers.json", () => {
@@ -62,10 +81,9 @@ describe("resolveClineStaticKey", () => {
   })
 
   it("returns undefined when nothing is set", () => {
-    expect(resolveClineStaticKey(ioFor(clineProvidersJson({})))).toBeUndefined()
+    expect(resolveClineStaticKey({ ...ioFor(clineProvidersJson({})), env: {} })).toBeUndefined()
   })
 })
-
 describe("readOpencodeAuth", () => {
   it("returns the stored auth for an id", () => {
     const opts = ioByPath({ [AUTH_PATH]: JSON.stringify({ clinepass: { type: "api", key: "k" } }) })

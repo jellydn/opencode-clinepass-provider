@@ -10,21 +10,27 @@ import { autoImportCredentials } from "../src/clinepass.js"
 import { clineProvidersJson, ioByPath, fakeFetch, fakeClient, AUTH_PATH, CLINE_PATH } from "./helpers.js"
 
 describe("autoImportCredentials", () => {
-  it("does nothing when clinepass auth already exists", async () => {
+  it("does nothing when clinepass auth already exists and no env key", async () => {
     const c = fakeClient()
-    const opts = ioByPath({ [AUTH_PATH]: JSON.stringify({ clinepass: { type: "api", key: "existing" } }) })
+    const opts = {
+      ...ioByPath({ [AUTH_PATH]: JSON.stringify({ clinepass: { type: "api", key: "existing" } }) }),
+      env: {},
+    }
     await autoImportCredentials(c, opts)
     expect(c.calls.set).toHaveLength(0)
   })
 
   it("imports fresh WorkOS credentials without refreshing", async () => {
     const c = fakeClient()
-    const opts = ioByPath({
-      [AUTH_PATH]: "{}",
-      [CLINE_PATH]: clineProvidersJson({
-        clinePassAuth: { accessToken: "workos:e", refreshToken: "r", expiresAt: Date.now() + 3600_000 },
+    const opts = {
+      ...ioByPath({
+        [AUTH_PATH]: "{}",
+        [CLINE_PATH]: clineProvidersJson({
+          clinePassAuth: { accessToken: "workos:e", refreshToken: "r", expiresAt: Date.now() + 3600_000 },
+        }),
       }),
-    })
+      env: {},
+    }
     await autoImportCredentials(c, opts)
     expect(c.calls.set).toHaveLength(1)
     expect((c.calls.set[0] as { body: { type: string; access: string } }).body).toMatchObject({
@@ -44,6 +50,7 @@ describe("autoImportCredentials", () => {
         }),
       }),
       fetch: f,
+      env: {},
     }
     await autoImportCredentials(c, opts)
     expect(c.calls.set).toHaveLength(1)
@@ -54,16 +61,55 @@ describe("autoImportCredentials", () => {
     const c = fakeClient()
     const opts = {
       ...ioByPath({ [AUTH_PATH]: "{}", [CLINE_PATH]: clineProvidersJson({}) }),
-      env: { CLINE_API_KEY: "ck-env" },
+      env: { CLINE_API_KEY: "ck-env-static-key-12345" },
     }
     await autoImportCredentials(c, opts)
     expect(c.calls.set).toHaveLength(1)
-    expect((c.calls.set[0] as { body: { type: string; key: string } }).body).toEqual({ type: "api", key: "ck-env" })
+    expect((c.calls.set[0] as { body: { type: string; key: string } }).body).toEqual({
+      type: "api",
+      key: "ck-env-static-key-12345",
+    })
+  })
+
+  it("prefers CLINE_API_KEY over existing oauth auth", async () => {
+    const c = fakeClient()
+    const opts = {
+      ...ioByPath({
+        [AUTH_PATH]: JSON.stringify({
+          clinepass: { type: "oauth", access: "workos:old", refresh: "r", expires: Date.now() + 9999 },
+        }),
+        [CLINE_PATH]: clineProvidersJson({}),
+      }),
+      env: { CLINE_API_KEY: "ck-env-wins-over-oauth" },
+    }
+    await autoImportCredentials(c, opts)
+    expect(c.calls.set).toHaveLength(1)
+    expect((c.calls.set[0] as { body: { type: string; key: string } }).body).toEqual({
+      type: "api",
+      key: "ck-env-wins-over-oauth",
+    })
+  })
+
+  it("skips re-import when store already has the same env API key", async () => {
+    const c = fakeClient()
+    const key = "ck-already-stored"
+    const opts = {
+      ...ioByPath({
+        [AUTH_PATH]: JSON.stringify({ clinepass: { type: "api", key } }),
+        [CLINE_PATH]: clineProvidersJson({}),
+      }),
+      env: { CLINE_API_KEY: key },
+    }
+    await autoImportCredentials(c, opts)
+    expect(c.calls.set).toHaveLength(0)
   })
 
   it("warns when no credentials are found", async () => {
     const c = fakeClient()
-    await autoImportCredentials(c, ioByPath({ [AUTH_PATH]: "{}", [CLINE_PATH]: clineProvidersJson({}) }))
+    await autoImportCredentials(c, {
+      ...ioByPath({ [AUTH_PATH]: "{}", [CLINE_PATH]: clineProvidersJson({}) }),
+      env: {},
+    })
     expect(c.calls.set).toHaveLength(0)
     expect(c.calls.logs.some((l) => /no credentials found/.test(String((l as { message: string }).message)))).toBe(true)
   })
