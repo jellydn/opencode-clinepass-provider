@@ -30,8 +30,11 @@ export const DASHBOARD_URL = "https://app.cline.bot/settings/api-keys"
 /** Path (relative to $HOME) of the Cline CLI provider settings file. */
 export const CLINE_CLI_AUTH_REL = join(".cline", "data", "settings", "providers.json")
 
-/** Path (relative to $HOME) of opencode's stored credentials. */
+/** Path (relative to $HOME) of OpenCode's stored credentials. */
 export const OPENCODE_AUTH_REL = join(".local", "share", "opencode", "auth.json")
+
+/** Path (relative to $HOME) of Kilo Code's stored credentials (OpenCode-compatible fork). */
+export const KILO_AUTH_REL = join(".local", "share", "kilo", "auth.json")
 
 /** Conservative WorkOS token lifetime estimate (~1h). */
 export const WORKOS_TOKEN_LIFETIME_MS = 55 * 60 * 1000

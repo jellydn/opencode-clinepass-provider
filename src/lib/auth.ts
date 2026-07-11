@@ -13,6 +13,7 @@ import {
   CLINE_CLI_AUTH_REL,
   ENV_API_KEY,
   type IoOptions,
+  KILO_AUTH_REL,
   OPENCODE_AUTH_REL,
   sanitizeApiKey,
   WORKOS_TOKEN_LIFETIME_MS,
@@ -146,12 +147,34 @@ export function resolveClineStaticKey(opts: IoOptions = {}): string | undefined 
   return undefined
 }
 
-/** Paths searched for opencode's stored credentials. */
-export function opencodeAuthPaths(home: string = homedir()): string[] {
-  return [join(home, OPENCODE_AUTH_REL), join(home, "Library", "Application Support", "opencode", "auth.json")]
+/**
+ * True when this process is the Kilo Code CLI (OpenCode-compatible fork).
+ * Used to prefer ~/.local/share/kilo/auth.json over OpenCode's auth store.
+ */
+export function isKiloHost(): boolean {
+  const argv0 = process.argv0 ?? ""
+  const argv1 = process.argv[1] ?? ""
+  const blob = `${argv0} ${argv1}`.toLowerCase()
+  // Binary names like `kilo`, `kilo.exe`, or paths ending in /kilo
+  if (/(^|[\\/])kilo(\.exe)?$/.test(argv0.toLowerCase())) return true
+  if (blob.includes("kilo") && !blob.includes("opencode")) return true
+  return false
 }
 
-/** Read the stored Auth for a provider id from opencode's auth.json. */
+/**
+ * Paths searched for host credential stores (OpenCode + Kilo Code).
+ * Host-primary path is first so reads/writes prefer the product that's running.
+ */
+export function opencodeAuthPaths(home: string = homedir()): string[] {
+  const kilo = [join(home, KILO_AUTH_REL), join(home, "Library", "Application Support", "kilo", "auth.json")]
+  const opencode = [
+    join(home, OPENCODE_AUTH_REL),
+    join(home, "Library", "Application Support", "opencode", "auth.json"),
+  ]
+  return isKiloHost() ? [...kilo, ...opencode] : [...opencode, ...kilo]
+}
+
+/** Read the stored Auth for a provider id from the host auth.json. */
 export function readOpencodeAuth(id: string, opts: IoOptions = {}): Auth | undefined {
   const home = opts.homeDir?.() ?? homedir()
   for (const path of opencodeAuthPaths(home)) {
@@ -228,14 +251,14 @@ export function apiAuth(key: string): Auth {
 }
 
 /**
- * Write the Auth for a provider id directly into opencode's auth.json file.
- * Used as a belt-and-suspenders persistence alongside `client.auth.set()`.
+ * Write the Auth for a provider id into the host auth.json file (OpenCode or
+ * Kilo). Used as a belt-and-suspenders persistence alongside `client.auth.set()`.
  * Creates parent directories if needed and writes atomically via temp file.
  * Returns true on success, false on any error (never throws).
  *
- * When no existing file is found at any path, creates the platform-appropriate
- * default (~/.local/share/opencode/auth.json on Linux, ~/Library/Application
- * Support/opencode/auth.json on macOS).
+ * Prefers an existing auth file among known host paths. When none exist,
+ * creates the host-primary default (`~/.local/share/kilo/auth.json` under
+ * Kilo, `~/.local/share/opencode/auth.json` under OpenCode).
  */
 export function saveOpencodeAuth(id: string, auth: Auth, opts: IoOptions = {}): boolean {
   const home = opts.homeDir?.() ?? homedir()
@@ -270,13 +293,13 @@ export function saveOpencodeAuth(id: string, auth: Auth, opts: IoOptions = {}): 
 }
 
 /**
- * Return the platform-appropriate default path for opencode's auth.json.
- * On macOS: ~/Library/Application Support/opencode/auth.json
- * On Linux and other platforms: ~/.local/share/opencode/auth.json
+ * Host-primary default path for auth.json when creating a new file.
+ * Kilo: ~/.local/share/kilo/auth.json
+ * OpenCode: ~/.local/share/opencode/auth.json
  */
 export function defaultOpencodeAuthPath(home: string): string {
-  const paths = opencodeAuthPaths(home)
-  return process.platform === "darwin" ? paths[1] : paths[0]
+  // First entry of opencodeAuthPaths is always the host-primary XDG path.
+  return opencodeAuthPaths(home)[0]
 }
 
 /** Extract a usable bearer token from a stored Auth record. */

@@ -79,14 +79,16 @@ with Bun at startup:
 ### Option D — Kilo Code (compatible fork)
 
 This plugin also works with the [Kilo Code CLI](https://kilo.ai) (v1.0+), which
-is a compatible fork of OpenCode. The plugin export shape and hook API are
-already compatible — just copy the files into Kilo's plugin directory:
+is a compatible fork of OpenCode. Use the **singular** `plugin/` directory
+(not `plugins/` — Kilo may load both and double-register the provider):
 
 ```bash
 git clone https://github.com/haconglinh1990/opencode-clinepass-provider.git
 mkdir -p ~/.config/kilo/plugin/lib
 cp opencode-clinepass-provider/src/clinepass.ts ~/.config/kilo/plugin/
 cp opencode-clinepass-provider/src/lib/{auth,env,errors,models,utils,workos}.ts ~/.config/kilo/plugin/lib/
+# remove a stale plural install if present (avoids loading the plugin twice)
+rm -rf ~/.config/kilo/plugins/clinepass.ts ~/.config/kilo/plugins/lib
 ```
 
 > **Note:** If you don't already have a `package.json` in `~/.config/kilo/`,
@@ -105,6 +107,10 @@ cp opencode-clinepass-provider/src/lib/{auth,env,errors,models,utils,workos}.ts 
 > ```
 >
 > Restart Kilo after adding the dependencies — it runs `bun install` at startup.
+>
+> **Auth store:** Kilo keeps credentials in `~/.local/share/kilo/auth.json`.
+> The plugin reads/writes that path when running under Kilo (and still falls
+> back to OpenCode's auth store).
 
 ### That's it — no config editing needed!
 

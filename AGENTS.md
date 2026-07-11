@@ -62,8 +62,9 @@ The legacy loader iterates every export if you default-export the function, so t
 
 - **Cline CLI**: `~/.cline/data/settings/providers.json` — keys `providers["cline-pass"].settings` (then `providers["cline"].settings`).
 - **OpenCode auth store**: `~/.local/share/opencode/auth.json`, with macOS fallback `~/Library/Application Support/opencode/auth.json`.
-- **WorkOS tokens** are prefixed `workos:`, refreshed lazily in the `chat.headers` hook with a 5-minute margin.
-- **Static API key** priority: `CLINE_API_KEY` env var → `providers.json settings.apiKey`.
+- **Kilo auth store**: `~/.local/share/kilo/auth.json` (preferred when the process is the Kilo CLI).
+- **WorkOS tokens** are prefixed `workos:`, refreshed lazily via custom `fetch` + `chat.headers` (5-minute margin).
+- **Static API key** priority: `CLINE_API_KEY` env var → `providers.json settings.apiKey` (wins over stored OAuth).
 
 ## Testing
 

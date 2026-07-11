@@ -14,6 +14,8 @@ import {
   getCachedAuth,
   setCachedAuth,
   persistAuth,
+  opencodeAuthPaths,
+  defaultOpencodeAuthPath,
 } from "../../src/lib/auth.js"
 import { clineProvidersJson, ioFor, ioByPath, AUTH_PATH } from "../helpers.js"
 
@@ -227,5 +229,20 @@ describe("persistAuth", () => {
     await persistAuth(client, "clinepass", auth, opts)
     expect(getCachedAuth("clinepass", { fileExists: () => false, readFile: () => "{}" })).toEqual(auth)
     setCachedAuth("clinepass", undefined)
+  })
+})
+
+describe("opencodeAuthPaths", () => {
+  it("includes both OpenCode and Kilo XDG auth paths", () => {
+    const paths = opencodeAuthPaths("/home/user")
+    expect(paths).toContain("/home/user/.local/share/opencode/auth.json")
+    expect(paths).toContain("/home/user/.local/share/kilo/auth.json")
+    expect(paths).toContain("/home/user/Library/Application Support/opencode/auth.json")
+    expect(paths).toContain("/home/user/Library/Application Support/kilo/auth.json")
+  })
+
+  it("defaultOpencodeAuthPath is the first (host-primary) path", () => {
+    const home = "/home/user"
+    expect(defaultOpencodeAuthPath(home)).toBe(opencodeAuthPaths(home)[0])
   })
 })
