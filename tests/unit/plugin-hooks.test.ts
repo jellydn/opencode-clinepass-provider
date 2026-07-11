@@ -173,7 +173,7 @@ describe("chat.headers hook", () => {
     expect(output.headers["Authorization"]).toBeUndefined()
   })
 
-  it("injects Authorization header for oauth auth", async () => {
+  it("injects authorization header for oauth auth", async () => {
     const expires = Date.now() + 3600_000
     mockReadOpencodeAuth.mockReturnValue({
       type: "oauth",
@@ -185,7 +185,7 @@ describe("chat.headers hook", () => {
     const input = chatInput()
     const output = chatOutput()
     await hooks["chat.headers"]!(input as Parameters<NonNullable<(typeof hooks)["chat.headers"]>>[0], output)
-    expect(output.headers["Authorization"]).toBe("Bearer workos:test-token")
+    expect(output.headers["authorization"]).toBe("Bearer workos:test-token")
   })
 
   it("handles expired oauth token refresh failure gracefully", async () => {
@@ -201,6 +201,7 @@ describe("chat.headers hook", () => {
     const output = chatOutput()
     await hooks["chat.headers"]!(input as Parameters<NonNullable<(typeof hooks)["chat.headers"]>>[0], output)
     // Expired token + unrecoverable refresh failure: fail-safe must NOT send a stale bearer.
+    expect(output.headers["authorization"]).toBeUndefined()
     expect(output.headers["Authorization"]).toBeUndefined()
     const errorLogs = client.calls.logs.filter((l) => (l as { level: string }).level === "error")
     expect(errorLogs.length).toBeGreaterThan(0)
@@ -228,8 +229,8 @@ describe("chat.headers hook", () => {
     const input = chatInput()
     const output = chatOutput()
     await hooks["chat.headers"]!(input as Parameters<NonNullable<(typeof hooks)["chat.headers"]>>[0], output)
-    // Should inject the refreshed token
-    expect(output.headers["Authorization"]).toContain("Bearer workos:eyJfresh")
+    // Should inject the refreshed token (lowercase header key)
+    expect(output.headers["authorization"]).toContain("Bearer workos:eyJfresh")
     // Should have called saveOpencodeAuth with the new tokens
     expect(mockSaveOpencodeAuth).toHaveBeenCalledTimes(1)
     const savedId = mockSaveOpencodeAuth.mock.calls[0][0]
@@ -242,10 +243,10 @@ describe("chat.headers hook", () => {
 })
 
 describe("auth loader hook", () => {
-  it("returns { apiKey } for oauth auth", async () => {
+  it("returns dummy apiKey + custom fetch for oauth auth", async () => {
     const { hooks } = await getHooks()
     const authHook = hooks.auth!
-    const result = await authHook.loader!(
+    const result = (await authHook.loader!(
       async () => ({
         type: "oauth" as const,
         access: "workos:eyJ",
@@ -253,8 +254,10 @@ describe("auth loader hook", () => {
         expires: Date.now() + 3600_000,
       }),
       {} as Parameters<NonNullable<typeof authHook.loader>>[1],
-    )
-    expect(result).toEqual({ apiKey: "workos:eyJ" })
+    )) as { apiKey?: string; fetch?: typeof globalThis.fetch }
+    // Dummy key so openai-compatible doesn't stamp the real (possibly expired) token.
+    expect(result.apiKey).toBe("clinepass-oauth")
+    expect(typeof result.fetch).toBe("function")
   })
 
   it("returns { apiKey } for api auth", async () => {
@@ -316,7 +319,7 @@ describe("auth loader hook", () => {
     expect(result).toEqual({})
   })
 
-  it("falls back to readOpencodeAuth when auth() rejects and file has auth", async () => {
+  it("falls back to readOpencodeAuth when auth() rejects and file has oauth auth", async () => {
     mockReadOpencodeAuth.mockReturnValue({
       type: "oauth",
       access: "workos:fallback-token",
@@ -325,14 +328,51 @@ describe("auth loader hook", () => {
     })
     const { hooks } = await getHooks()
     const authHook = hooks.auth!
-    const result = await authHook.loader!(
+    const result = (await authHook.loader!(
       async () => {
         throw new Error("auth store unavailable")
       },
       {} as Parameters<NonNullable<typeof authHook.loader>>[1],
-    )
-    expect(result).toEqual({ apiKey: "workos:fallback-token" })
+    )) as { apiKey?: string; fetch?: typeof globalThis.fetch }
+    expect(result.apiKey).toBe("clinepass-oauth")
+    expect(typeof result.fetch).toBe("function")
     expect(mockReadOpencodeAuth).toHaveBeenCalledWith("clinepass")
+  })
+
+  it("oauth loader fetch injects a refreshed bearer authorization header", async () => {
+    mockReadOpencodeAuth.mockReturnValue({
+      type: "oauth",
+      access: "workos:cached-token",
+      refresh: "r-cached",
+      expires: Date.now() + 3600_000,
+    })
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+      text: async () => "",
+    } as Response)
+    const { hooks } = await getHooks()
+    const authHook = hooks.auth!
+    const result = (await authHook.loader!(
+      async () => ({
+        type: "oauth" as const,
+        access: "workos:cached-token",
+        refresh: "r-cached",
+        expires: Date.now() + 3600_000,
+      }),
+      {} as Parameters<NonNullable<typeof authHook.loader>>[1],
+    )) as { fetch?: typeof globalThis.fetch }
+    await result.fetch!("https://api.cline.bot/api/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: "Bearer stale" },
+    })
+    expect(fetchSpy).toHaveBeenCalled()
+    const call = fetchSpy.mock.calls[0]
+    const init = call[1] as RequestInit
+    const headers = new Headers(init.headers)
+    expect(headers.get("authorization")).toBe("Bearer workos:cached-token")
+    fetchSpy.mockRestore()
   })
 
   it("falls back to readOpencodeAuth when auth() returns undefined and file has api auth", async () => {

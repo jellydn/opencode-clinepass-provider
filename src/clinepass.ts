@@ -209,15 +209,70 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
   // Zero-config auto-import of Cline CLI / env credentials (never overwrites /connect).
   await autoImportCredentials(client).catch((e) => log("error", "ClinePass: auto-import failed.", { error: errMsg(e) }))
 
+  /**
+   * Resolve a usable WorkOS access token for the current request: refresh when
+   * near expiry, persist rotations, and return undefined when unrecoverable.
+   * Shared by chat.headers and the oauth loader's custom fetch.
+   */
+  async function resolveFreshOauthAccess(): Promise<string | undefined> {
+    const a = getCachedAuth(PROVIDER_ID)
+    if (!a || a.type !== "oauth") return undefined
+    try {
+      const refreshed = await refreshClineAuthCreds({
+        accessToken: a.access,
+        refreshToken: a.refresh,
+        expiresAt: oauthExpiryMs(a),
+      })
+      if (refreshed.access !== a.access) {
+        const updated = refreshedToAuth(refreshed, a.accountId)
+        setCachedAuth(PROVIDER_ID, updated)
+        // Save via SDK API for the runtime credential store, and to
+        // auth.json so readOpencodeAuth always sees fresh tokens across
+        // restarts (belt-and-suspenders fallback for early-init mismatch).
+        await persistAuth(client, PROVIDER_ID, updated)
+        await log("info", "ClinePass: refreshed WorkOS access token.")
+      }
+      return refreshed.access
+    } catch (e) {
+      await log("error", "ClinePass: token refresh failed — re-run /connect to re-authenticate.", {
+        error: errMsg(e),
+      })
+      // Don't send a stale bearer when the token is already expired and
+      // unrecoverable — sending it guarantees a 401 and masks the failure.
+      if (oauthExpiryMs(a) <= Date.now()) return undefined
+      return a.access
+    }
+  }
+
   const authHook: AuthHook = {
     provider: PROVIDER_ID,
-    // Feed the stored credential into the provider as `apiKey`.
-    // Falls back to reading the auth.json file directly if the SDK's auth()
-    // store doesn't have the entry (e.g. v1/v2 store mismatch, startup timing).
+    // Feed credentials into the openai-compatible provider.
+    // Static API keys: return as apiKey (SDK builds Authorization: Bearer).
+    // WorkOS OAuth: return a dummy apiKey + custom fetch that injects a
+    // freshly-refreshed bearer. Returning the raw (possibly expired) access
+    // token as apiKey lets the AI SDK stamp a stale Authorization header that
+    // can win over chat.headers — matching OpenCode's xAI OAuth pattern.
+    // Falls back to reading auth.json if the SDK's auth() store is empty.
     loader: async (auth) => {
       const a = (await auth().catch(() => undefined)) as Auth | undefined
       const resolved = a ?? readOpencodeAuth(PROVIDER_ID)
       setCachedAuth(PROVIDER_ID, resolved)
+      if (!resolved) return {}
+      if (resolved.type === "oauth") {
+        return {
+          // Satisfy openai-compatible's required apiKey without using a real token.
+          apiKey: "clinepass-oauth",
+          async fetch(input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) {
+            const token = await resolveFreshOauthAccess()
+            const headers = new Headers(
+              init?.headers ?? (typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined),
+            )
+            if (token) headers.set("authorization", `Bearer ${token}`)
+            else headers.delete("authorization")
+            return globalThis.fetch(input, { ...init, headers })
+          },
+        }
+      }
       const key = extractKey(resolved)
       return key ? { apiKey: key } : {}
     },
@@ -315,39 +370,18 @@ export const ClinePassPlugin: Plugin = async (ctx) => {
 
     auth: authHook,
 
-    // Refresh WorkOS tokens lazily, right before each LLM request, and inject
-    // the fresh Authorization header. Static keys are handled by the loader's
-    // apiKey option, so this hook only acts for oauth credentials.
+    // Belt-and-suspenders with the oauth loader's custom fetch: also inject a
+    // fresh Authorization via chat.headers. Use lowercase `authorization` so
+    // intermediate plain-object merges don't leave a duplicate Authorization.
+    // Static keys are handled by the loader's apiKey option — this only acts
+    // for oauth credentials.
     "chat.headers": async (input, output) => {
       const providerInfo = input.provider?.info
       if (providerInfo?.id !== PROVIDER_ID) return
       const a = getCachedAuth(PROVIDER_ID)
       if (!a || a.type !== "oauth") return
-      try {
-        const refreshed = await refreshClineAuthCreds({
-          accessToken: a.access,
-          refreshToken: a.refresh,
-          expiresAt: oauthExpiryMs(a),
-        })
-        if (refreshed.access !== a.access) {
-          const updated = refreshedToAuth(refreshed, a.accountId)
-          setCachedAuth(PROVIDER_ID, updated)
-          // Save via SDK API for the runtime credential store, and to
-          // auth.json so readOpencodeAuth always sees fresh tokens across
-          // restarts (belt-and-suspenders fallback for early-init mismatch).
-          await persistAuth(client, PROVIDER_ID, updated)
-          await log("info", "ClinePass: refreshed WorkOS access token.")
-        }
-        output.headers["Authorization"] = `Bearer ${refreshed.access}`
-      } catch (e) {
-        await log("error", "ClinePass: token refresh failed — re-run /connect to re-authenticate.", {
-          error: errMsg(e),
-        })
-        // Don't send a stale bearer when the token is already expired and
-        // unrecoverable — sending it guarantees a 401 and masks the failure.
-        if (oauthExpiryMs(a) <= Date.now()) return
-        output.headers["Authorization"] = `Bearer ${a.access}`
-      }
+      const token = await resolveFreshOauthAccess()
+      if (token) output.headers["authorization"] = `Bearer ${token}`
     },
 
     // Surface friendly ClinePass errors (403/401/429) into the opencode log.
