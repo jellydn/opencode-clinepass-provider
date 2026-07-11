@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/konsistent/konsistent.schema.json",
+  "version": "v1",
+  "conventions": [
+    {
+      "name": "source-modules",
+      "description": "Source modules are TypeScript files in src/",
+      "paths": "src/*.ts",
+      "must": {
+        "haveType": "file"
+      }
+    },
+    {
+      "name": "unit-test-files",
+      "description": "Unit test files exist for the expected structure",
+      "paths": "tests/unit/*.test.ts",
+      "must": {
+        "haveType": "file"
+      }
+    }
+  ]
+}

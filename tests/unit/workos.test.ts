@@ -1,0 +1,84 @@
+/**
+ * Unit tests for WorkOS token refresh (src/workos.ts).
+ */
+
+import { describe, expect, it, vi } from "vitest"
+import { refreshWorkosToken } from "../../src/lib/workos.js"
+import { fakeFetch } from "../helpers.js"
+
+describe("refreshWorkosToken", () => {
+  it("refreshes via the nested data envelope and adds the workos: prefix", async () => {
+    const f = fakeFetch({
+      data: { accessToken: "eyJnew", refreshToken: "rnew" },
+    })
+    const r = await refreshWorkosToken("oldR", { fetch: f })
+    expect(r.access).toBe("workos:eyJnew")
+    expect(r.refresh).toBe("rnew")
+    expect(r.expires).toBeGreaterThan(Date.now())
+    expect(f).toHaveBeenCalledWith(
+      "https://api.cline.bot/api/v1/auth/refresh",
+      expect.objectContaining({ method: "POST" }),
+    )
+  })
+
+  it("keeps an existing workos: prefix", async () => {
+    const f = fakeFetch({ accessToken: "workos:eyJ", refreshToken: "r" })
+    expect((await refreshWorkosToken("r", { fetch: f })).access).toBe("workos:eyJ")
+  })
+
+  it("reuses the input refresh token when the response is accessToken-only", async () => {
+    const f = fakeFetch({ data: { accessToken: "eyJnew" } })
+    const r = await refreshWorkosToken("oldR", { fetch: f })
+    expect(r.access).toBe("workos:eyJnew")
+    expect(r.refresh).toBe("oldR")
+  })
+
+  it("honors the server's expiresAt when present as an ISO string", async () => {
+    const expiresAt = new Date(Date.now() + 120_000).toISOString()
+    const f = fakeFetch({
+      data: { accessToken: "eyJnew", refreshToken: "rnew", expiresAt },
+    })
+    const r = await refreshWorkosToken("oldR", { fetch: f })
+    expect(r.expires).toBe(Date.parse(expiresAt))
+  })
+
+  it("honors the server's expiresAt when present as numeric epoch ms", async () => {
+    const expiresAt = Date.now() + 180_000
+    const f = fakeFetch({
+      data: { accessToken: "eyJnew", refreshToken: "rnew", expiresAt },
+    })
+    const r = await refreshWorkosToken("oldR", { fetch: f })
+    expect(r.expires).toBe(expiresAt)
+  })
+
+  it("honors the server's expiresAt when present as numeric epoch seconds", async () => {
+    const expiresSec = Math.floor(Date.now() / 1000) + 300
+    const f = fakeFetch({
+      data: { accessToken: "eyJnew", refreshToken: "rnew", expiresAt: expiresSec },
+    })
+    const r = await refreshWorkosToken("oldR", { fetch: f })
+    expect(r.expires).toBe(expiresSec * 1000)
+  })
+
+  it("rejects when success is false", async () => {
+    const f = fakeFetch({ success: false })
+    await expect(refreshWorkosToken("r", { fetch: f })).rejects.toThrow(/success:false/)
+  })
+
+  it("throws on non-OK response", async () => {
+    const f = fakeFetch("bad", { ok: false, status: 400 })
+    await expect(refreshWorkosToken("r", { fetch: f })).rejects.toThrow(/400/)
+  })
+
+  it("throws when tokens are missing", async () => {
+    const f = fakeFetch({ data: {} })
+    await expect(refreshWorkosToken("r", { fetch: f })).rejects.toThrow(/unexpected/)
+  })
+
+  it("throws a friendly timeout error on abort", async () => {
+    const f = vi.fn(async () => {
+      throw new DOMException("timeout", "AbortError")
+    }) as unknown as typeof globalThis.fetch
+    await expect(refreshWorkosToken("r", { fetch: f })).rejects.toThrow(/timed out/)
+  })
+})
