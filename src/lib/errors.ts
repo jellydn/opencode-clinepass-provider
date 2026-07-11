@@ -7,7 +7,8 @@
 
 export type ClinePassErrorType = "not_subscribed" | "auth_expired" | "rate_limited" | "unknown"
 
-export const CLINEPASS_ERROR_MESSAGES: Record<ClinePassErrorType, string> = {
+/** User-facing messages keyed by classified ClinePass error type. */
+export const CLINEPASS_ERROR_MESSAGES: Readonly<Record<ClinePassErrorType, string>> = {
   not_subscribed:
     "ClinePass subscription required. Visit app.cline.bot to subscribe, or run /connect → ClinePass to re-authenticate.",
   auth_expired: "ClinePass authentication expired. Run /connect, select ClinePass to refresh your credentials.",
@@ -15,6 +16,10 @@ export const CLINEPASS_ERROR_MESSAGES: Record<ClinePassErrorType, string> = {
   unknown: "ClinePass request failed. Check your subscription at app.cline.bot or run /connect → ClinePass.",
 }
 
+/**
+ * Map a raw error message to a ClinePass error type and user-friendly message.
+ * Detects 403/subscription, 401/invalid key, and 429/rate-limit patterns.
+ */
 export function classifyClinePassError(message: string): {
   type: ClinePassErrorType
   message: string

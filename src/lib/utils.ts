@@ -4,14 +4,17 @@
  * @module utils
  */
 
+/** True when value is a non-null, non-array object. */
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
+/** Return value when it is a string; otherwise undefined. */
 export function stringValue(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined
 }
 
+/** Coerce a finite number or numeric string; empty/NaN → undefined. */
 export function numberValue(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value === "string") {

@@ -41,7 +41,7 @@ The Cline CLI stores credentials in a nested JSON structure:
 }
 ```
 
-Credential resolution priority (`src/auth.ts`):
+Credential resolution priority (`src/lib/auth.ts`):
 1. `CLINE_API_KEY` env var
 2. `~/.cline/data/settings/providers.json` → `providers["cline-pass"].settings.apiKey`
 3. `~/.cline/data/settings/providers.json` → `providers["cline-pass"].settings.auth` (WorkOS OAuth)
@@ -49,7 +49,7 @@ Credential resolution priority (`src/auth.ts`):
 
 ## OpenCode Auth Store
 
-**Paths** (`src/auth.ts`):
+**Paths** (`src/lib/auth.ts`):
 - `~/.local/share/opencode/auth.json` (Linux/macOS)
 - `~/Library/Application Support/opencode/auth.json` (macOS fallback)
 
@@ -72,7 +72,7 @@ The plugin reads/writes auth entries keyed by provider id (`clinepass`):
 
 **Token format**: Access tokens are prefixed with `workos:` (e.g., `workos:eyJ...`). Refresh tokens are opaque strings without the prefix.
 
-**Refresh flow** (`src/workos.ts`):
+**Refresh flow** (`src/lib/workos.ts`):
 1. POST `{apiBase}/api/v1/auth/refresh` with `{ granttype: "refresh_token", refreshToken }`
 2. Response: `{ data: { accessToken, refreshToken } }` (nested) or `{ accessToken, refreshToken }` (flat)
 3. New access token is re-prefixed with `workos:` if the API returns a bare JWT

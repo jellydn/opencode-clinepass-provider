@@ -11,12 +11,12 @@ The project follows the architecture of [jellydn/pi-clinepass-provider](https://
 ## Module Dependency Graph
 
 ```
-src/utils.ts          (type guards, zero deps)
-src/env.ts            (constants, env helpers, IoOptions)
-src/errors.ts         (error classification)
-src/workos.ts         ── depends on utils, env
-src/auth.ts           ── depends on utils, env, @opencode-ai/sdk
-src/models.ts         ── depends on env
+src/lib/utils.ts      (type guards, zero deps)
+src/lib/env.ts        (constants, env helpers, IoOptions)
+src/lib/errors.ts     (error classification)
+src/lib/workos.ts     ── depends on utils, env
+src/lib/auth.ts       ── depends on utils, env, workos, @opencode-ai/sdk
+src/lib/models.ts     ── depends on env
 src/clinepass.ts      ── depends on ALL modules + @opencode-ai/plugin
 ```
 
@@ -24,15 +24,15 @@ src/clinepass.ts      ── depends on ALL modules + @opencode-ai/plugin
 
 ### 1. Foundation Layer (utils, env)
 Pure functions with no side effects. All I/O is injectable via `IoOptions` for testability.
-- `utils.ts`: `isRecord`, `stringValue`, `numberValue`
-- `env.ts`: Constants (`PROVIDER_ID`, paths, timeouts), `resolveApiBase`, `sanitizeApiKey`, `isWorkosToken`, `IoOptions`
+- `lib/utils.ts`: `isRecord`, `stringValue`, `numberValue`, `errMsg`, `jwtExpirySeconds`
+- `lib/env.ts`: Constants (`PROVIDER_ID`, paths, timeouts), `resolveApiBase`, `sanitizeApiKey`, `isWorkosToken`, `IoOptions`
 
 ### 2. Domain Layer (errors, workos, auth, models)
 Business logic with injected dependencies.
-- `errors.ts`: `classifyClinePassError` — maps error messages to user-friendly types
-- `workos.ts`: `refreshWorkosToken` — calls Cline's refresh endpoint
-- `auth.ts`: Credential extraction from Cline CLI, OpenCode auth store helpers, `extractKey`
-- `models.ts`: `MODELS` array, `modelsToConfig`, `fetchRemoteModels`, `buildProviderConfig`, `injectProviderConfig`
+- `lib/errors.ts`: `classifyClinePassError` — maps error messages to user-friendly types
+- `lib/workos.ts`: `refreshWorkosToken`, `ensureValidWorkosToken` — Cline refresh endpoint
+- `lib/auth.ts`: Credential extraction, auth store helpers, in-memory cache, `persistAuth`, `extractKey`
+- `lib/models.ts`: `MODELS` array, `modelsToConfig`, `fetchRemoteModels`, `buildProviderConfig`, `injectProviderConfig`
 
 ### 3. Plugin Layer (clinepass.ts)
 OpenCode plugin implementation. Orchestrates all domain modules:
@@ -57,8 +57,9 @@ OpenCode plugin implementation. Orchestrates all domain modules:
    └─ provider.models → fetchRemoteModels(key) or modelsToConfig()
 
 4. Request sent
-   └─ chat.headers hook → check token expiry
-   └─ If expired: refreshWorkosToken() → inject Authorization header
+   └─ chat.headers hook → getCachedAuth() → check token expiry (JWT exp preferred)
+   └─ If expired: refreshClineAuthCreds() → persistAuth() → inject Authorization header
+   └─ If refresh fails and token already expired: suppress stale bearer (no Authorization)
    └─ If static key: skip (loader handles auth via apiKey option)
 
 5. Response received

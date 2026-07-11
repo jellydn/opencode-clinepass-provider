@@ -215,7 +215,7 @@ bun install            # or npm install
 bun run lint           # oxlint
 bun run fmt:check      # oxfmt --check (format check)
 bun run typecheck      # tsc --noEmit
-bun run test           # vitest run (96 tests across 8 files)
+bun run test           # vitest run (99 tests across 8 files)
 bun run konsistent     # structural convention checks
 ```
 

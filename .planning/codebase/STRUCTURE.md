@@ -5,30 +5,31 @@
 ```
 opencode-clinepass-provider/
 ├── src/
-│   ├── clinepass.ts          # Plugin entry + barrel re-exports (274 lines)
-│   ├── utils.ts              # Type guards (22 lines)
-│   ├── env.ts                # Constants + env helpers + IoOptions (76 lines)
-│   ├── errors.ts             # Error classification (33 lines)
-│   ├── workos.ts             # WorkOS token refresh (69 lines)
-│   ├── auth.ts               # Credential extraction + auth store (155 lines)
-│   └── models.ts             # Model definitions + config generation (231 lines)
+│   ├── clinepass.ts          # Plugin entry + barrel re-exports
+│   └── lib/
+│       ├── utils.ts          # Type guards, errMsg, jwtExpirySeconds
+│       ├── env.ts            # Constants + env helpers + IoOptions
+│       ├── errors.ts         # Error classification
+│       ├── workos.ts         # WorkOS token refresh
+│       ├── auth.ts           # Credential extraction + auth store + cache
+│       └── models.ts         # Model definitions + config generation
 ├── tests/
-│   ├── clinepass.test.ts     # autoImportCredentials tests only (5 tests)
-│   ├── helpers.ts            # Shared test utilities (clineProvidersJson, fakeFetch, etc.)
+│   ├── clinepass.test.ts     # autoImportCredentials tests only
+│   ├── helpers.ts            # Shared test utilities
 │   └── unit/
-│       ├── utils.test.ts     # 3 tests
-│       ├── env.test.ts       # 7 tests
-│       ├── errors.test.ts    # 7 tests
-│       ├── workos.test.ts    # 5 tests
-│       ├── auth.test.ts      # 14 tests
-│       ├── models.test.ts    # 17 tests
-│       └── clinepass.test.ts # 23 tests — plugin hooks (config, provider, chat, auth, event)
-├── opencode.example.json     # Example opencode.json config
-├── package.json              # Package manifest
-├── tsconfig.json             # TypeScript config (noEmit)
-├── vitest.config.ts          # Vitest config (tests/**/*.test.ts)
+│       ├── utils.test.ts
+│       ├── env.test.ts
+│       ├── errors.test.ts
+│       ├── workos.test.ts
+│       ├── auth.test.ts
+│       ├── models.test.ts
+│       └── plugin-hooks.test.ts
+├── opencode.example.json
+├── package.json
+├── tsconfig.json
+├── vitest.config.ts
 └── .planning/
-    └── codebase/             # Generated codebase documentation
+    └── codebase/
 ```
 
 ## Key Locations
@@ -36,19 +37,20 @@ opencode-clinepass-provider/
 | What | Where |
 |------|-------|
 | Plugin entry point | `src/clinepass.ts` (default export: `{ id, server }`) |
-| Provider registration | `src/models.ts` → `injectProviderConfig()` |
-| Credential resolution | `src/auth.ts` → `resolveClineAuthCredentials()`, `resolveClineStaticKey()` |
-| Token refresh | `src/workos.ts` → `refreshWorkosToken()` |
-| Model discovery | `src/models.ts` → `fetchRemoteModels()` |
+| Provider registration | `src/lib/models.ts` → `injectProviderConfig()` |
+| Credential resolution | `src/lib/auth.ts` → `resolveClineAuthCredentials()`, `resolveClineStaticKey()` |
+| Token refresh | `src/lib/workos.ts` → `refreshWorkosToken()` / `ensureValidWorkosToken()` |
+| Auth cache + persist | `src/lib/auth.ts` → `getCachedAuth`, `setCachedAuth`, `persistAuth` |
+| Model discovery | `src/lib/models.ts` → `fetchRemoteModels()` |
 | Auth flow | `src/clinepass.ts` → `authHook` inside `ClinePassPlugin` |
-| Error surfacing | `src/errors.ts` → `classifyClinePassError()` + `src/clinepass.ts` → `event` hook |
-| Plugin hook tests | `tests/unit/clinepass.test.ts` (23 tests) |
-| Test helpers | `tests/helpers.ts` → `clineProvidersJson`, `fakeFetch`, `ioByPath`, `fakeClient` |
-| Example config | `opencode.example.json` |
+| Error surfacing | `src/lib/errors.ts` → `classifyClinePassError()` + `src/clinepass.ts` → `event` hook |
+| Plugin hook tests | `tests/unit/plugin-hooks.test.ts` |
+| Test helpers | `tests/helpers.ts` |
 
 ## File Naming Conventions
 
-- Source files: `kebab-case.ts` (e.g., `clinepass.ts`, `error-handler.ts`)
+- Source files: `kebab-case.ts` (e.g., `clinepass.ts`)
+- Helper modules: under `src/lib/` so OpenCode's plugin scanner does not load them as plugins
 - Test files: `{module}.test.ts` matching source module name
 - Barrel re-exports: all from `clinepass.ts`
 - Imports: `.js` extension in import paths (ESM convention): `from "./utils.js"`
@@ -57,6 +59,7 @@ opencode-clinepass-provider/
 
 | Method | Path |
 |--------|------|
-| File-based plugin | `~/.config/opencode/plugins/clinepass.ts` |
+| File-based plugin | `~/.config/opencode/plugins/clinepass.ts` + `plugins/lib/*` |
 | npm-based plugin | `"plugin": ["opencode-clinepass-provider"]` in `opencode.json` |
 | Manual config | `"provider.clinepass"` in `opencode.json` (see `opencode.example.json`) |
+| Kilo Code | `~/.config/kilo/plugin/` (same layout as OpenCode) |

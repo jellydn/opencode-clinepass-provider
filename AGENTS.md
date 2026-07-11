@@ -6,7 +6,7 @@
 bun install
 bun run lint           # oxlint — 0 warnings target
 bun run typecheck      # tsc --noEmit — run before pushing
-bun run test           # vitest run (81 tests, 8 files)
+bun run test           # vitest run (99 tests, 8 files)
 bun run test:watch     # vitest
 bun run fmt            # oxfmt — format in place
 bun run fmt:check      # oxfmt --check (CI)
@@ -14,13 +14,18 @@ bun run lint:fix       # oxlint --fix
 bun run konsistent     # structural convention checks
 ```
 
-Run `lint → typecheck → test` before pushing. Tests require no network — all I/O is injected.
+Run `lint → typecheck → test` before pushing. Tests require no network — all I/O is injected (plugin-hooks tests may use `vi.mock` for the module-scoped auth cache).
 
 ## Architecture
 
-7 modules under `src/`, entrypoint is `src/clinepass.ts`. A barrel file that re-exports everything from the other 6 modules — tests import from `"../src/clinepass.js"`.
+Entrypoint is `src/clinepass.ts` (barrel + plugin). Six helper modules live under `src/lib/` so OpenCode's file-based plugin scanner does not load them as standalone plugins:
 
-No build step — this is raw TypeScript run directly by Bun.
+```
+src/clinepass.ts          # plugin + re-exports
+src/lib/{utils,env,errors,workos,auth,models}.ts
+```
+
+No build step — raw TypeScript run directly by Bun.
 
 ## Plugin export shape
 
@@ -35,16 +40,19 @@ Named exports (types, helpers) are safe alongside it — the `{ id, server }` ob
 ## Key conventions
 
 - **No semicolons, double quotes** for strings
-- **All I/O injectable** via `IoOptions` / `WorkosRefreshOptions` — no `vi.mock()` needed in tests
+- **JSDoc on every exported function**
+- **All I/O injectable** via `IoOptions` / `WorkosRefreshOptions` — prefer DI over `vi.mock()`; plugin-hooks may mock the auth cache module when needed
 - **`sanitizeApiKey()`** strips bracketed paste wrappers and control chars (users paste from terminals)
 - **`classifyClinePassError()`** maps raw messages to user-friendly types (403/401/429)
 - **Private helpers stay private** (`walkClineProviderSettings`, `readJsonFile`, `defaultRead` in `auth.ts`)
 - **`client.app.log(...).catch(() => {})`** — logging failures must not crash the plugin
+- **In-memory auth cache** lives in `auth.ts` (`getCachedAuth` / `setCachedAuth`); `persistAuth` updates it
 
 ## Testing
 
 - Uses `tests/helpers.ts` fakes: `fakeFetch`, `fakeClient`, `ioFor`, `ioByPath`
-- Per-module tests in `tests/unit/`, plugin integration tests in `tests/clinepass.test.ts`
+- Per-module tests in `tests/unit/`; `tests/clinepass.test.ts` covers `autoImportCredentials` only
+- Plugin hook tests in `tests/unit/plugin-hooks.test.ts`
 - `fetchRemoteModels()` gracefully returns `undefined` on any error — callers fall back to `MODELS` static array
 
 ## Auth paths
