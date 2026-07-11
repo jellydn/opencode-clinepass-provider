@@ -89,7 +89,8 @@ export const MODELS: readonly ModelDef[] = [
     context: 1_000_000,
     output: 384_000,
     reasoning: true,
-    thinkingLevelMap: { off: "none", minimal: null, low: null, medium: null, high: "high", xhigh: "high" },
+    // DeepSeek only supports high reasoning; off/minimal/low/medium are unsupported.
+    thinkingLevelMap: { off: null, minimal: null, low: null, medium: null, high: "high", xhigh: "high" },
   },
   {
     id: "cline-pass/deepseek-v4-flash",
@@ -97,7 +98,7 @@ export const MODELS: readonly ModelDef[] = [
     context: 1_000_000,
     output: 384_000,
     reasoning: true,
-    thinkingLevelMap: { off: "none", minimal: null, low: null, medium: null, high: "high", xhigh: "high" },
+    thinkingLevelMap: { off: null, minimal: null, low: null, medium: null, high: "high", xhigh: "high" },
   },
   {
     id: "cline-pass/mimo-v2.5",

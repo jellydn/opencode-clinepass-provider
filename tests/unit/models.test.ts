@@ -43,9 +43,11 @@ describe("models", () => {
     }
   })
 
-  it("DeepSeek models have low/medium null, xhigh maps to high", () => {
+  it("DeepSeek models only support high/xhigh (off/minimal/low/medium null)", () => {
     for (const id of ["cline-pass/deepseek-v4-pro", "cline-pass/deepseek-v4-flash"]) {
       const m = MODELS.find((x) => x.id === id)!
+      expect(m.thinkingLevelMap.off).toBeNull()
+      expect(m.thinkingLevelMap.minimal).toBeNull()
       expect(m.thinkingLevelMap.low).toBeNull()
       expect(m.thinkingLevelMap.medium).toBeNull()
       expect(m.thinkingLevelMap.xhigh).toBe("high")
